@@ -1,0 +1,10 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { isAdminEmail } from "@/lib/admin";
+import { db } from "@/db/client";
+import { campaigns, recipients } from "@/db/schema";
+import { randomUUID } from "crypto";
+import Papa from "papaparse";
+import { z } from "zod";
+const schema=z.object({name:z.string().min(1).max(120),subject:z.string().min(1).max(200),html:z.string().max(200000),text:z.string().max(200000)});
+export async function POST(req:Request){const session=await auth();if(!isAdminEmail(session?.user?.email))return NextResponse.json({error:"Unauthorized"},{status:401});try{const form=await req.formData();const parsed=schema.parse({name:form.get("name"),subject:form.get("subject"),html:form.get("html"),text:form.get("text")});const file=form.get("file");if(!(file instanceof File))return NextResponse.json({error:"CSV file is required"},{status:400});if(file.size>5*1024*1024)return NextResponse.json({error:"CSV tối đa 5MB"},{status:400});const csv=await file.text();const result=Papa.parse<Record<string,string>>(csv,{header:true,skipEmptyLines:true,transformHeader:h=>h.trim().toLowerCase()});const rows=result.data;const emailKey=Object.keys(rows[0]||{}).find(k=>k.toLowerCase()==="email");if(!emailKey)return NextResponse.json({error:"CSV phải có cột email"},{status:400});const valid=rows.filter(r=>/^\S+@\S+\.\S+$/.test((r[emailKey]||"").trim())).slice(0,10000);if(!valid.length)return NextResponse.json({error:"Không có email hợp lệ"},{status:400});const id=randomUUID(),now=Date.now();await db.insert(campaigns).values({id,name:parsed.name,subject:parsed.subject,htmlContent:parsed.html,textContent:parsed.text,recipientCount:valid.length,createdAt:now,updatedAt:now});await db.insert(recipients).values(valid.map(r=>({id:randomUUID(),campaignId:id,email:r[emailKey].trim().toLowerCase(),name:r.name?.trim()||null,variablesJson:JSON.stringify(r),status:"pending",createdAt:now})));return NextResponse.json({id,count:valid.length});}catch(e){console.error(e);return NextResponse.json({error:"Không thể tạo campaign. Kiểm tra schema Turso và file CSV."},{status:500})}}

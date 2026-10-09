@@ -1,0 +1,1 @@
+{"routes":[{"path":"/","title":"Home"},{"path":"/login","title":"Login"},{"path":"/admin","title":"Admin dashboard"},{"path":"/admin/campaigns/new","title":"New campaign"},{"path":"/admin/campaigns/:id","title":"Campaign detail"}]}

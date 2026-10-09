@@ -1,0 +1,22 @@
+{
+  "name": "email-campaign-starter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {"dev": "next dev", "build": "next build", "start": "next start", "lint": "next lint", "typecheck": "tsc --noEmit"},
+  "dependencies": {
+    "@libsql/client": "^0.15.9",
+    "@tiptap/extension-link": "^2.11.5",
+    "@tiptap/pm": "^2.11.5",
+    "@tiptap/react": "^2.11.5",
+    "@tiptap/starter-kit": "^2.11.5",
+    "drizzle-orm": "^0.36.4",
+    "next": "^15.1.6",
+    "next-auth": "^5.0.0-beta.25",
+    "papaparse": "^5.4.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "resend": "^4.1.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {"@types/node": "^22.10.5", "@types/papaparse": "^5.3.15", "@types/react": "^19.0.3", "@types/react-dom": "^19.0.2", "typescript": "^5.7.2"}
+}
