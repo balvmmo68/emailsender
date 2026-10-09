@@ -4,3 +4,7 @@ out
 .env*
 !.env.example
 .vercel
+
+# Local development artifacts
+*.db
+*.tsbuildinfo
