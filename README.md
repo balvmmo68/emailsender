@@ -15,6 +15,8 @@ cp .env.example .env.local
 openssl rand -base64 32
 ```
 
+`AUTH_SECRET` là bắt buộc khi chạy production; không commit giá trị này vào GitHub. Trên Vercel, thêm các biến `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET` và `AUTH_TRUST_HOST=true` trong **Settings → Environment Variables**, sau đó tạo deployment mới. Nếu thiếu `AUTH_SECRET`, Auth.js sẽ báo lỗi `MissingSecret` và trang có thể hiển thị lỗi server-side.
+
 ## 2. Google OAuth
 
 Trong Google Cloud Console, tạo OAuth Client loại Web application:
