@@ -23,7 +23,7 @@ Trong Google Cloud Console, tạo OAuth Client loại Web application:
 - Local callback: `http://localhost:3000/api/auth/callback/google`
 - Production callback: `https://YOUR_DOMAIN/api/auth/callback/google`
 
-Admin duy nhất được phép đăng nhập là `balv.airdrop@gmail.com`, đặt bằng `ADMIN_EMAIL`.
+Các tài khoản admin được phép đăng nhập gồm `balv.airdrop@gmail.com` và `richworld369.com@gmail.com`. Có thể cấu hình thêm tài khoản trong `ADMIN_EMAILS`, phân tách bằng dấu phẩy hoặc khoảng trắng. Biến `ADMIN_EMAIL` cũ vẫn được hỗ trợ để không làm gián đoạn deployment hiện tại.
 
 ## 3. Turso
 
