@@ -4,6 +4,14 @@ function fromAddress() {
   return process.env.EMAIL_FROM || "onboarding@resend.dev";
 }
 
+function fromEmail() {
+  const value = fromAddress().trim();
+  const match = value.match(/<([^<>\s]+@[^<>\s]+)>/);
+  const email = (match?.[1] || value).trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_FROM phải là email hợp lệ, ví dụ sender@your-domain.com");
+  return email;
+}
+
 async function readResponse(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body?.message || body?.error || `Provider trả về HTTP ${response.status}`);
@@ -16,12 +24,13 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
   const key = process.env[env];
   if (!key) throw new Error(`Thiếu ${env}`);
   const from = fromAddress();
+  const email = fromEmail();
   if (env === "RESEND_API_KEY") {
     const body = await readResponse(await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [message.to], subject: message.subject, html: message.html, text: message.text }) }));
     return body.id as string | undefined;
   }
   if (env === "BREVO_API_KEY") {
-    const body = await readResponse(await fetch("https://api.brevo.com/v3/smtp/email", { method: "POST", headers: { "api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: { email: from }, to: [{ email: message.to }], subject: message.subject, htmlContent: message.html, textContent: message.text }) }));
+    const body = await readResponse(await fetch("https://api.brevo.com/v3/smtp/email", { method: "POST", headers: { "api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: { email }, to: [{ email: message.to }], subject: message.subject, htmlContent: message.html, textContent: message.text }) }));
     return body.messageId as string | undefined;
   }
   if (env === "POSTMARK_SERVER_TOKEN") {
@@ -29,7 +38,7 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
     return body.MessageID as string | undefined;
   }
   if (env === "MAILERSEND_API_TOKEN") {
-    const body = await fetch("https://api.mailersend.com/v1/email", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: { email: from }, to: [{ email: message.to }], subject: message.subject, html: message.html, text: message.text }) });
+    const body = await fetch("https://api.mailersend.com/v1/email", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: { email }, to: [{ email: message.to }], subject: message.subject, html: message.html, text: message.text }) });
     if (!body.ok) throw new Error(`MailerSend trả về HTTP ${body.status}`);
     return body.headers.get("x-message-id") || undefined;
   }
@@ -42,7 +51,7 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
     return body.id as string | undefined;
   }
   if (env === "SMTP2GO_API_KEY") {
-    const body = await readResponse(await fetch("https://api.smtp2go.com/v3/email/send", { method: "POST", headers: { "X-Smtp2go-Api-Key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: from, to: [message.to], subject: message.subject, html_body: message.html, text_body: message.text }) }));
+    const body = await readResponse(await fetch("https://api.smtp2go.com/v3/email/send", { method: "POST", headers: { "X-Smtp2go-Api-Key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: email, to: [message.to], subject: message.subject, html_body: message.html, text_body: message.text }) }));
     return body?.request_id as string | undefined;
   }
   throw new Error(`Chưa có adapter gửi cho ${env}`);
