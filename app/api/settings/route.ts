@@ -60,7 +60,7 @@ function getKeyMetadata(row: { providerConfigsJson?: string | null; providerLimi
   const configs = getProviderConfigs(row);
   return keyDefinitions.map((definition) => ({
     ...definition,
-    configured: Boolean(process.env[definition.env]),
+    configured: Boolean(process.env[definition.env] && (definition.env !== "MAILJET_API_KEY" || process.env.MAILJET_SECRET_KEY)),
     config: configs[definition.env],
     usedToday: usage[definition.env] || 0,
     rotationThreshold: Math.floor(configs[definition.env].dailyLimit * 0.9),

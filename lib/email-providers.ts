@@ -14,7 +14,10 @@ function fromEmail() {
 
 async function readResponse(response: Response) {
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body?.message || body?.error || `Provider trả về HTTP ${response.status}`);
+  if (!response.ok) {
+    const message = body?.ErrorMessage || body?.message || body?.error || body?.Messages?.flatMap((item: any) => item?.Errors || []).map((item: any) => item?.ErrorMessage || item?.Message).filter(Boolean).join("; ");
+    throw new Error(message || `Provider trả về HTTP ${response.status}`);
+  }
   return body;
 }
 
