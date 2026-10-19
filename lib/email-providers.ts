@@ -18,7 +18,7 @@ async function readResponse(response: Response) {
   return body;
 }
 
-export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY"];
+export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY"];
 
 export async function sendViaProvider(env: string, message: ProviderMessage) {
   const key = process.env[env];
@@ -32,6 +32,14 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
   if (env === "BREVO_API_KEY") {
     const body = await readResponse(await fetch("https://api.brevo.com/v3/smtp/email", { method: "POST", headers: { "api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: { email }, to: [{ email: message.to }], subject: message.subject, htmlContent: message.html, textContent: message.text }) }));
     return body.messageId as string | undefined;
+  }
+  if (env === "MAILJET_API_KEY") {
+    const secret = process.env.MAILJET_SECRET_KEY;
+    if (!secret) throw new Error("Thiếu MAILJET_SECRET_KEY");
+    const authorization = Buffer.from(`${key}:${secret}`).toString("base64");
+    const senderName = from.match(/^([^<]+)</)?.[1]?.trim();
+    const body = await readResponse(await fetch("https://api.mailjet.com/v3.1/send", { method: "POST", headers: { Authorization: `Basic ${authorization}`, "Content-Type": "application/json" }, body: JSON.stringify({ Messages: [{ From: { Email: email, ...(senderName ? { Name: senderName } : {}) }, To: [{ Email: message.to }], Subject: message.subject, HTMLPart: message.html, TextPart: message.text }] }) }));
+    return body.Messages?.[0]?.To?.[0]?.MessageID?.toString();
   }
   if (env === "POSTMARK_SERVER_TOKEN") {
     const body = await readResponse(await fetch("https://api.postmarkapp.com/email", { method: "POST", headers: { "X-Postmark-Server-Token": key, "Content-Type": "application/json" }, body: JSON.stringify({ From: from, To: message.to, Subject: message.subject, HtmlBody: message.html, TextBody: message.text, MessageStream: "outbound" }) }));
@@ -62,6 +70,12 @@ export async function testProvider(env: string) {
   if (!key) throw new Error(`Chưa cấu hình ${env}`);
   if (env === "RESEND_API_KEY") return readResponse(await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${key}` } }));
   if (env === "BREVO_API_KEY") return readResponse(await fetch("https://api.brevo.com/v3/account", { headers: { "api-key": key } }));
+  if (env === "MAILJET_API_KEY") {
+    const secret = process.env.MAILJET_SECRET_KEY;
+    if (!secret) throw new Error("Thiếu MAILJET_SECRET_KEY");
+    const authorization = Buffer.from(`${key}:${secret}`).toString("base64");
+    return readResponse(await fetch("https://api.mailjet.com/v3/REST/myprofile", { headers: { Authorization: `Basic ${authorization}` } }));
+  }
   if (env === "POSTMARK_SERVER_TOKEN") return readResponse(await fetch("https://api.postmarkapp.com/server", { headers: { "X-Postmark-Server-Token": key } }));
   if (env === "MAILERSEND_API_TOKEN") return readResponse(await fetch("https://api.mailersend.com/v1/domains", { headers: { Authorization: `Bearer ${key}` } }));
   if (env === "SMTP2GO_API_KEY") return readResponse(await fetch("https://api.smtp2go.com/v3/stats/email", { headers: { "X-Smtp2go-Api-Key": key } }));
