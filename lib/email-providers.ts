@@ -25,7 +25,16 @@ async function readResponse(response: Response) {
   return body;
 }
 
-export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY"];
+export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY", "AGENTMAIL_API_KEY"];
+
+async function resolveAgentMailInboxId(key: string) {
+  const configuredInbox = process.env.AGENTMAIL_INBOX_ID?.trim();
+  if (configuredInbox) return configuredInbox;
+  const result = await readResponse(await fetch("https://api.agentmail.to/v0/inboxes?limit=1", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
+  const inboxId = result.inboxes?.[0]?.inbox_id || result.inboxes?.[0]?.email;
+  if (!inboxId) throw new Error("Chưa có inbox AgentMail. Tạo inbox trong AgentMail Console hoặc đặt AGENTMAIL_INBOX_ID trong Vercel.");
+  return inboxId as string;
+}
 
 export async function sendViaProvider(env: string, message: ProviderMessage) {
   const key = process.env[env];
@@ -56,6 +65,11 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
   if (env === "MAILOFLY_API_KEY") {
     const body = await readResponse(await fetch("https://api.mailofly.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ from, to: [message.to], subject: message.subject, html: message.html, text: message.text }) }));
     return body.id as string | undefined;
+  }
+  if (env === "AGENTMAIL_API_KEY") {
+    const inboxId = await resolveAgentMailInboxId(key);
+    const body = await readResponse(await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ to: message.to, subject: message.subject, text: message.text, html: message.html }) }));
+    return body.message_id || body.id;
   }
   if (env === "POSTMARK_SERVER_TOKEN") {
     const body = await readResponse(await fetch("https://api.postmarkapp.com/email", { method: "POST", headers: { "X-Postmark-Server-Token": key, "Content-Type": "application/json" }, body: JSON.stringify({ From: from, To: message.to, Subject: message.subject, HtmlBody: message.html, TextBody: message.text, MessageStream: "outbound" }) }));
@@ -94,6 +108,7 @@ export async function testProvider(env: string) {
   }
   if (env === "MAILTRAP_API_TOKEN") return readResponse(await fetch("https://mailtrap.io/api/accounts", { headers: { Authorization: `Bearer ${key}` } }));
   if (env === "MAILOFLY_API_KEY") return readResponse(await fetch("https://api.mailofly.com/identities", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
+  if (env === "AGENTMAIL_API_KEY") return readResponse(await fetch("https://api.agentmail.to/v0/inboxes?limit=1", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
   if (env === "POSTMARK_SERVER_TOKEN") return readResponse(await fetch("https://api.postmarkapp.com/server", { headers: { "X-Postmark-Server-Token": key } }));
   if (env === "MAILERSEND_API_TOKEN") return readResponse(await fetch("https://api.mailersend.com/v1/domains", { headers: { Authorization: `Bearer ${key}` } }));
   if (env === "SMTP2GO_API_KEY") return readResponse(await fetch("https://api.smtp2go.com/v3/stats/email", { headers: { "X-Smtp2go-Api-Key": key } }));
