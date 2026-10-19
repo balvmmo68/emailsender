@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
- type Log = { id: string; providerEnv: string; operation: string; recipient: string | null; errorMessage: string; createdAt: number };
+type Log = { id: string; providerEnv: string; operation: string; recipient: string | null; errorMessage: string; createdAt: number };
 
 export default function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
@@ -11,6 +11,7 @@ export default function LogsPage() {
   const [total, setTotal] = useState(0);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   async function load(nextPage = page) {
     const response = await fetch(`/api/logs?page=${nextPage}`);
@@ -20,6 +21,13 @@ export default function LogsPage() {
   }
 
   useEffect(() => { load(1); }, []);
+
+  async function refreshLogs() {
+    setRefreshing(true); setError("");
+    await load(page);
+    setMessage("Đã cập nhật logs mới nhất.");
+    setRefreshing(false);
+  }
 
   async function copyError(value: string) {
     await navigator.clipboard.writeText(value);
@@ -35,5 +43,5 @@ export default function LogsPage() {
     load(id && logs.length === 1 && page > 1 ? page - 1 : page);
   }
 
-  return <><div className="eyebrow">Diagnostics</div><div className="toolbar"><div><h1 className="title">Provider logs</h1><p className="sub">Lịch sử lỗi khi Test API và gửi email test theo từng provider.</p></div><button className="button danger" type="button" disabled={!total} onClick={() => remove()}>Xóa toàn bộ logs</button></div>{message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}<section className="panel"><div className="logs-summary"><h2>Logs lỗi ({total})</h2><span>Trang {page} / {totalPages}</span></div><div className="tablewrap"><table className="table logs-table"><thead><tr><th>Thời gian</th><th>Provider</th><th>Thao tác</th><th>Email nhận</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{logs.length ? logs.map((log) => <tr key={log.id}><td>{new Date(log.createdAt).toLocaleString("vi-VN")}</td><td><code>{log.providerEnv}</code></td><td>{log.operation}</td><td>{log.recipient || "—"}</td><td><span className="log-error">{log.errorMessage}</span></td><td><div className="log-actions"><button className="button secondary" type="button" onClick={() => copyError(log.errorMessage)}>Copy lỗi</button><button className="button danger" type="button" onClick={() => remove(log.id)}>Xóa</button></div></td></tr>) : <tr><td colSpan={6}>Chưa có log lỗi nào.</td></tr>}</tbody></table></div><div className="pagination"><span>Hiển thị tối đa 20 logs mỗi trang</span><div className="pagination-actions"><button className="button secondary" type="button" disabled={page <= 1} onClick={() => load(page - 1)}>← Trước</button><button className="button secondary" type="button" disabled={page >= totalPages} onClick={() => load(page + 1)}>Sau →</button></div></div></section></>;
+  return <><div className="eyebrow">Diagnostics</div><div className="toolbar"><div><h1 className="title">Provider logs</h1><p className="sub">Lịch sử lỗi khi Test API và gửi email test theo từng provider.</p></div><div className="logs-toolbar-actions"><button className="button secondary refresh-button" type="button" onClick={refreshLogs} disabled={refreshing} aria-label="Làm mới logs" title="Làm mới logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14.7 4L20 15" /><path d="M20 20v-5h-5" /></svg>{refreshing ? "Đang tải…" : "Refresh"}</button><button className="button danger" type="button" disabled={!total} onClick={() => remove()}>Xóa toàn bộ logs</button></div></div>{message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}<section className="panel"><div className="logs-summary"><h2>Logs lỗi ({total})</h2><span>Trang {page} / {totalPages}</span></div><div className="tablewrap"><table className="table logs-table"><thead><tr><th>Thời gian</th><th>Provider</th><th>Thao tác</th><th>Email nhận</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{logs.length ? logs.map((log) => <tr key={log.id}><td>{new Date(log.createdAt).toLocaleString("vi-VN")}</td><td><code>{log.providerEnv}</code></td><td>{log.operation}</td><td>{log.recipient || "—"}</td><td><span className="log-error">{log.errorMessage}</span></td><td><div className="log-actions"><button className="button secondary" type="button" onClick={() => copyError(log.errorMessage)}>Copy lỗi</button><button className="button danger" type="button" onClick={() => remove(log.id)}>Xóa</button></div></td></tr>) : <tr><td colSpan={6}>Chưa có log lỗi nào.</td></tr>}</tbody></table></div><div className="pagination"><span>Hiển thị tối đa 20 logs mỗi trang</span><div className="pagination-actions"><button className="button secondary" type="button" disabled={page <= 1} onClick={() => load(page - 1)}>← Trước</button><button className="button secondary" type="button" disabled={page >= totalPages} onClick={() => load(page + 1)}>Sau →</button></div></div></section></>;
 }
