@@ -104,6 +104,7 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .table th, .table td { text-align: left; padding: 12px; border-bottom: 1px solid #e8eef3; overflow-wrap: anywhere; }
 .table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
 .pill { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: #e7f6f3; color: var(--teal); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.pill-danger { background: #fde8e8; color: #c53030; }
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; color: var(--muted); font-size: 13px; }
 .pagination-actions { display: flex; gap: 8px; }
 .pagination .button { min-height: 38px; padding: 8px 12px; font-size: 13px; }
