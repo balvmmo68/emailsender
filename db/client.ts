@@ -20,6 +20,9 @@ export function ensureDatabase() {
         html_content TEXT NOT NULL DEFAULT '',
         text_content TEXT NOT NULL DEFAULT '',
         recipient_count INTEGER NOT NULL DEFAULT 0,
+        send_status TEXT NOT NULL DEFAULT 'draft',
+        send_cursor INTEGER NOT NULL DEFAULT 0,
+        send_error TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )`);
@@ -33,6 +36,13 @@ export function ensureDatabase() {
         created_at INTEGER NOT NULL
       )`);
       await client.execute("CREATE INDEX IF NOT EXISTS recipients_campaign_idx ON recipients(campaign_id)");
+      for (const statement of [
+        "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'",
+        "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE campaigns ADD COLUMN send_error TEXT",
+      ]) {
+        try { await client.execute(statement); } catch { /* Column already exists. */ }
+      }
       await client.execute(`CREATE TABLE IF NOT EXISTS email_settings (
         id INTEGER PRIMARY KEY NOT NULL,
         delay_seconds INTEGER NOT NULL DEFAULT 10,

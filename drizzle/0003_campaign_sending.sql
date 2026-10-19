@@ -1,0 +1,3 @@
+ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft';
+ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE campaigns ADD COLUMN send_error TEXT;

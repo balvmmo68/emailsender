@@ -7,6 +7,9 @@ export const campaigns = sqliteTable("campaigns", {
   htmlContent: text("html_content").notNull().default(""),
   textContent: text("text_content").notNull().default(""),
   recipientCount: integer("recipient_count").notNull().default(0),
+  sendStatus: text("send_status").notNull().default("draft"),
+  sendCursor: integer("send_cursor").notNull().default(0),
+  sendError: text("send_error"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
