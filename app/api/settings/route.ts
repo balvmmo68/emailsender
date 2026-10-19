@@ -7,17 +7,17 @@ import { emailSettings, providerUsage } from "@/db/schema";
 import { z } from "zod";
 
 const keyDefinitions = [
-  { provider: "Resend", env: "RESEND_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
-  { provider: "Brevo", env: "BREVO_API_KEY", freeDaily: "300", freeMonthly: "Không giới hạn theo tháng" },
-  { provider: "Mailjet", env: "MAILJET_API_KEY", freeDaily: "200", freeMonthly: "6.000" },
-  { provider: "Mailtrap Email Sending", env: "MAILTRAP_API_TOKEN", freeDaily: "150", freeMonthly: "4.000" },
-  { provider: "Mailgun", env: "MAILGUN_API_KEY", freeDaily: "100", freeMonthly: "Không giới hạn theo tháng" },
-  { provider: "Postmark", env: "POSTMARK_SERVER_TOKEN", freeDaily: "Không nêu", freeMonthly: "100" },
-  { provider: "MailerSend", env: "MAILERSEND_API_TOKEN", freeDaily: "Không nêu", freeMonthly: "500" },
-  { provider: "SMTP2GO", env: "SMTP2GO_API_KEY", freeDaily: "Không nêu", freeMonthly: "1.000" },
-  { provider: "Mailofly", env: "MAILOFLY_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
-  { provider: "Lettr", env: "LETTR_API_KEY", freeDaily: "Không nêu", freeMonthly: "3.000" },
-  { provider: "AgentMail", env: "AGENTMAIL_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
+  { provider: "Resend", url: "https://resend.com", env: "RESEND_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
+  { provider: "Brevo", url: "https://www.brevo.com", env: "BREVO_API_KEY", freeDaily: "300", freeMonthly: "Không giới hạn theo tháng" },
+  { provider: "Mailjet", url: "https://www.mailjet.com", env: "MAILJET_API_KEY", freeDaily: "200", freeMonthly: "6.000" },
+  { provider: "Mailtrap Email Sending", url: "https://mailtrap.io", env: "MAILTRAP_API_TOKEN", freeDaily: "150", freeMonthly: "4.000" },
+  { provider: "Mailgun", url: "https://www.mailgun.com", env: "MAILGUN_API_KEY", freeDaily: "100", freeMonthly: "Không giới hạn theo tháng" },
+  { provider: "Postmark", url: "https://postmarkapp.com", env: "POSTMARK_SERVER_TOKEN", freeDaily: "Không nêu", freeMonthly: "100" },
+  { provider: "MailerSend", url: "https://www.mailersend.com", env: "MAILERSEND_API_TOKEN", freeDaily: "Không nêu", freeMonthly: "500" },
+  { provider: "SMTP2GO", url: "https://www.smtp2go.com", env: "SMTP2GO_API_KEY", freeDaily: "Không nêu", freeMonthly: "1.000" },
+  { provider: "Mailofly", url: "https://mailofly.com", env: "MAILOFLY_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
+  { provider: "Lettr", url: "https://lettr.com", env: "LETTR_API_KEY", freeDaily: "Không nêu", freeMonthly: "3.000" },
+  { provider: "AgentMail", url: "https://agentmail.to", env: "AGENTMAIL_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
 ];
 
 const providerConfigSchema = z.object({
