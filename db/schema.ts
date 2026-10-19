@@ -27,6 +27,7 @@ export const emailSettings = sqliteTable("email_settings", {
   dailyLimit: integer("daily_limit").notNull().default(100),
   providerLimitsJson: text("provider_limits_json").notNull().default("{}"),
   providerConfigsJson: text("provider_configs_json").notNull().default("{}"),
+  testRecipient: text("test_recipient").notNull().default(""),
   updatedAt: integer("updated_at").notNull(),
 });
 

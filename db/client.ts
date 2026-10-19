@@ -39,6 +39,7 @@ export function ensureDatabase() {
         daily_limit INTEGER NOT NULL DEFAULT 100,
         provider_limits_json TEXT NOT NULL DEFAULT '{}',
         provider_configs_json TEXT NOT NULL DEFAULT '{}',
+        test_recipient TEXT NOT NULL DEFAULT '',
         updated_at INTEGER NOT NULL
       )`);
       try {
@@ -48,6 +49,11 @@ export function ensureDatabase() {
       }
       try {
         await client.execute("ALTER TABLE email_settings ADD COLUMN provider_configs_json TEXT NOT NULL DEFAULT '{}'");
+      } catch {
+        // Column already exists on databases initialized with the latest schema.
+      }
+      try {
+        await client.execute("ALTER TABLE email_settings ADD COLUMN test_recipient TEXT NOT NULL DEFAULT ''");
       } catch {
         // Column already exists on databases initialized with the latest schema.
       }

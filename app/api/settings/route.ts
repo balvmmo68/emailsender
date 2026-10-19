@@ -27,6 +27,7 @@ const providerConfigSchema = z.object({
 });
 const settingsSchema = z.object({
   activeProvider: z.string().regex(/^[A-Z0-9_]+$/),
+  testRecipient: z.union([z.literal(""), z.string().email()]),
   providerConfigs: z.record(z.string().regex(/^[A-Z0-9_]+$/), providerConfigSchema),
 });
 
@@ -79,7 +80,7 @@ export async function GET() {
   const usageRows = await db.select().from(providerUsage).where(eq(providerUsage.usageDate, new Date().toISOString().slice(0, 10)));
   const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
   return NextResponse.json({
-    settings: { activeProvider: "RESEND_API_KEY", providerConfigs },
+    settings: { activeProvider: "RESEND_API_KEY", testRecipient: row?.testRecipient || "", providerConfigs },
     keys: getKeyMetadata(row, usage),
   });
 }
@@ -91,8 +92,8 @@ export async function PUT(req: Request) {
     await ensureDatabase();
     const providerLimitsJson = JSON.stringify(Object.fromEntries(Object.entries(input.providerConfigs).map(([env, config]) => [env, config.providerLimit])));
     const providerConfigsJson = JSON.stringify(input.providerConfigs);
-    await db.insert(emailSettings).values({ id: 1, delaySeconds: 10, dailyLimit: 100, providerLimitsJson, providerConfigsJson, updatedAt: Date.now() })
-      .onConflictDoUpdate({ target: emailSettings.id, set: { providerLimitsJson, providerConfigsJson, updatedAt: Date.now() } });
+    await db.insert(emailSettings).values({ id: 1, delaySeconds: 10, dailyLimit: 100, providerLimitsJson, providerConfigsJson, testRecipient: input.testRecipient, updatedAt: Date.now() })
+      .onConflictDoUpdate({ target: emailSettings.id, set: { providerLimitsJson, providerConfigsJson, testRecipient: input.testRecipient, updatedAt: Date.now() } });
     return NextResponse.json({ ok: true, settings: input });
   } catch {
     return NextResponse.json({ error: "Giá trị cấu hình provider không hợp lệ" }, { status: 400 });
