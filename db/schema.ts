@@ -20,3 +20,10 @@ export const recipients = sqliteTable("recipients", {
   status: text("status").notNull().default("pending"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const emailSettings = sqliteTable("email_settings", {
+  id: integer("id").primaryKey(),
+  delaySeconds: integer("delay_seconds").notNull().default(10),
+  dailyLimit: integer("daily_limit").notNull().default(100),
+  updatedAt: integer("updated_at").notNull(),
+});

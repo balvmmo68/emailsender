@@ -33,6 +33,14 @@ export function ensureDatabase() {
         created_at INTEGER NOT NULL
       )`);
       await client.execute("CREATE INDEX IF NOT EXISTS recipients_campaign_idx ON recipients(campaign_id)");
+      await client.execute(`CREATE TABLE IF NOT EXISTS email_settings (
+        id INTEGER PRIMARY KEY NOT NULL,
+        delay_seconds INTEGER NOT NULL DEFAULT 10,
+        daily_limit INTEGER NOT NULL DEFAULT 100,
+        updated_at INTEGER NOT NULL
+      )`);
+      await client.execute(`INSERT OR IGNORE INTO email_settings (id, delay_seconds, daily_limit, updated_at)
+        VALUES (1, 10, 100, ${Date.now()})`);
     })().catch((error) => {
       schemaPromise = undefined;
       throw error;
