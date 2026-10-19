@@ -149,6 +149,10 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
 .fileinput input { max-width: 100%; }
 .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .settings-panel { overflow: hidden; }
+.settings-tabs { display: flex; gap: 6px; margin: 22px 0 16px; padding: 5px; width: fit-content; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #edf2f6; }
+.settings-tab { min-height: 40px; border: 0; border-radius: 7px; padding: 9px 15px; background: transparent; color: var(--muted); font-weight: 750; cursor: pointer; }
+.settings-tab:hover, .settings-tab:focus-visible { color: var(--ink); background: #fff; }
+.settings-tab.active { background: #fff; color: var(--teal); box-shadow: 0 2px 6px #102a4314; }
 .settings-test-recipient { width: min(420px, 100%); margin-bottom: 18px; }
 .settings-tablewrap { border: 1px solid #e8eef3; border-radius: 9px; }
 .settings-table { min-width: 1240px; }
@@ -186,6 +190,8 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
   .fileinput { padding: 14px; }
   .fileinput input { width: 100%; font-size: 16px; }
   .settings-panel { padding: 14px; }
+  .settings-tabs { width: 100%; }
+  .settings-tab { flex: 1; }
   .settings-panel h2 { line-height: 1.35; }
   .settings-tablewrap { margin-left: 0; margin-right: 0; max-width: 100%; overflow: visible; border: 0; }
   .settings-table { min-width: 0; width: 100%; font-size: 13px; display: block; }
