@@ -7,11 +7,17 @@ import { emailSettings } from "@/db/schema";
 import { z } from "zod";
 
 const keyDefinitions = [
-  { provider: "Resend", env: "RESEND_API_KEY" },
-  { provider: "SendGrid", env: "SENDGRID_API_KEY" },
-  { provider: "Mailgun", env: "MAILGUN_API_KEY" },
-  { provider: "Postmark", env: "POSTMARK_SERVER_TOKEN" },
-  { provider: "Amazon SES", env: "AWS_ACCESS_KEY_ID" },
+  { provider: "Resend", env: "RESEND_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
+  { provider: "Brevo", env: "BREVO_API_KEY", freeDaily: "300", freeMonthly: "Không giới hạn theo tháng" },
+  { provider: "Mailjet", env: "MAILJET_API_KEY", freeDaily: "200", freeMonthly: "6.000" },
+  { provider: "Mailtrap Email Sending", env: "MAILTRAP_API_TOKEN", freeDaily: "150", freeMonthly: "4.000" },
+  { provider: "Mailgun", env: "MAILGUN_API_KEY", freeDaily: "100", freeMonthly: "Không giới hạn theo tháng" },
+  { provider: "Postmark", env: "POSTMARK_SERVER_TOKEN", freeDaily: "Không nêu", freeMonthly: "100" },
+  { provider: "MailerSend", env: "MAILERSEND_API_TOKEN", freeDaily: "Không nêu", freeMonthly: "500" },
+  { provider: "SMTP2GO", env: "SMTP2GO_API_KEY", freeDaily: "Không nêu", freeMonthly: "1.000" },
+  { provider: "Mailofly", env: "MAILOFLY_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
+  { provider: "Lettr", env: "LETTR_API_KEY", freeDaily: "Không nêu", freeMonthly: "3.000" },
+  { provider: "AgentMail", env: "AGENTMAIL_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
 ];
 
 const settingsSchema = z.object({
@@ -36,6 +42,8 @@ function getKeyMetadata(providerLimits: Record<string, string>) {
     env,
     configured: Boolean(process.env[env]),
     providerLimit: providerLimits[env] || "Chưa xác định — nhập hạn mức thủ công",
+    freeDaily: keyDefinitions.find((item) => item.env === env)?.freeDaily || "Không nêu",
+    freeMonthly: keyDefinitions.find((item) => item.env === env)?.freeMonthly || "Không nêu",
   }));
 }
 
