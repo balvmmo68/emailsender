@@ -6,7 +6,7 @@ import { recordProviderError } from "@/lib/provider-error-log";
 import { z } from "zod";
 
 const bodySchema = z.object({
-  env: z.enum(["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY"]),
+  env: z.enum(["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY"]),
   to: z.string().email(),
 });
 
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const input = await req.json().catch(() => ({}));
   const parsed = bodySchema.safeParse(input);
   if (!parsed.success) {
-    const knownProviders = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY"];
+    const knownProviders = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY"];
     const providerEnv = input && typeof input.env === "string" && knownProviders.includes(input.env) ? input.env : undefined;
     if (providerEnv) await recordProviderError(providerEnv, "send-test-validation", parsed.error.issues.map((issue) => issue.message).join("; "), typeof input.to === "string" ? input.to : undefined).catch(() => undefined);
     return NextResponse.json({ error: "Provider hoặc email nhận không hợp lệ" }, { status: 400 });

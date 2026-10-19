@@ -25,7 +25,7 @@ async function readResponse(response: Response) {
   return body;
 }
 
-export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY"];
+export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY"];
 
 export async function sendViaProvider(env: string, message: ProviderMessage) {
   const key = process.env[env];
@@ -52,6 +52,10 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
     const senderName = from.match(/^([^<]+)</)?.[1]?.trim();
     const body = await readResponse(await fetch("https://send.api.mailtrap.io/api/send", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: { email, ...(senderName ? { name: senderName } : {}) }, to: [{ email: message.to }], subject: message.subject, text: message.text, html: message.html }) }));
     return body.message_ids?.[0] || body.message_id || body.id;
+  }
+  if (env === "MAILOFLY_API_KEY") {
+    const body = await readResponse(await fetch("https://api.mailofly.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ from, to: [message.to], subject: message.subject, html: message.html, text: message.text }) }));
+    return body.id as string | undefined;
   }
   if (env === "POSTMARK_SERVER_TOKEN") {
     const body = await readResponse(await fetch("https://api.postmarkapp.com/email", { method: "POST", headers: { "X-Postmark-Server-Token": key, "Content-Type": "application/json" }, body: JSON.stringify({ From: from, To: message.to, Subject: message.subject, HtmlBody: message.html, TextBody: message.text, MessageStream: "outbound" }) }));
@@ -89,6 +93,7 @@ export async function testProvider(env: string) {
     return readResponse(await fetch("https://api.mailjet.com/v3/REST/myprofile", { headers: { Authorization: `Basic ${authorization}` } }));
   }
   if (env === "MAILTRAP_API_TOKEN") return readResponse(await fetch("https://mailtrap.io/api/accounts", { headers: { Authorization: `Bearer ${key}` } }));
+  if (env === "MAILOFLY_API_KEY") return readResponse(await fetch("https://api.mailofly.com/identities", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
   if (env === "POSTMARK_SERVER_TOKEN") return readResponse(await fetch("https://api.postmarkapp.com/server", { headers: { "X-Postmark-Server-Token": key } }));
   if (env === "MAILERSEND_API_TOKEN") return readResponse(await fetch("https://api.mailersend.com/v1/domains", { headers: { Authorization: `Bearer ${key}` } }));
   if (env === "SMTP2GO_API_KEY") return readResponse(await fetch("https://api.smtp2go.com/v3/stats/email", { headers: { "X-Smtp2go-Api-Key": key } }));
