@@ -10,6 +10,7 @@ type Settings = { activeProvider: string; testRecipient: string; providerConfigs
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings>({ activeProvider: "RESEND_API_KEY", testRecipient: "", providerConfigs: {} });
   const [keys, setKeys] = useState<KeyInfo[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<KeyInfo | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [testing, setTesting] = useState("");
@@ -19,9 +20,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch("/api/settings").then(async (res) => {
       if (!res.ok) throw new Error("Không thể tải cấu hình");
-      const data = await res.json();
-      setSettings(data.settings);
-      setKeys(data.keys);
+      const data = await res.json(); setSettings(data.settings); setKeys(data.keys);
     }).catch((err: Error) => setError(err.message));
   }, []);
 
@@ -55,33 +54,22 @@ export default function SettingsPage() {
   }
 
   return <>
-    <div className="eyebrow">System settings</div>
-    <h1 className="title">Cấu hình gửi email theo dịch vụ</h1>
-    <p className="sub">Mỗi API provider có bộ cấu hình riêng, không dùng chung khoảng cách gửi hoặc hạn mức/ngày.</p>
+    <div className="eyebrow">System settings</div><h1 className="title">Cấu hình gửi email theo dịch vụ</h1><p className="sub">Mỗi API provider có bộ cấu hình riêng, không dùng chung khoảng cách gửi hoặc hạn mức/ngày.</p>
     <div className="settings-tabs" role="tablist" aria-label="Settings navigation"><button className={`settings-tab ${activeTab === "settings" ? "active" : ""}`} type="button" role="tab" aria-selected={activeTab === "settings"} onClick={() => setActiveTab("settings")}>Cấu hình provider</button><button className={`settings-tab ${activeTab === "logs" ? "active" : ""}`} type="button" role="tab" aria-selected={activeTab === "logs"} onClick={() => setActiveTab("logs")}>Logs lỗi</button></div>
     {activeTab === "logs" ? <ProviderLogsPanel /> : <>
-      {message && <div className="notice">{message}</div>}
-      {error && <div className="notice error">{error}</div>}
+      {message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}
       <form className="panel settings-panel" onSubmit={save}>
-        <h2>Cấu hình từng dịch vụ</h2>
-        <div className="notice">Giá trị API key không bao giờ được trả về trình duyệt. Mỗi lần gửi sẽ chọn provider còn dưới 90% hạn mức/ngày, ưu tiên provider có tỷ lệ sử dụng thấp hơn, rồi thử provider kế tiếp nếu gửi thất bại.</div>
-        <div className="field settings-test-recipient"><label htmlFor="testRecipient">Email nhận test</label><input className="input" id="testRecipient" type="email" value={settings.testRecipient} onChange={(e) => setSettings({ ...settings, testRecipient: e.target.value })} placeholder="you@example.com" /><small>Nhập email rồi bấm “Lưu tất cả cấu hình provider”; giá trị sẽ được lưu và khôi phục sau khi tải lại.</small></div>
-        <div className="tablewrap settings-tablewrap"><table className="table settings-table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Free/ngày</th><th>Free/tháng</th><th>Khoảng cách (giây)</th><th>Tối đa/ngày</th><th>Đã dùng / ngưỡng xoay</th><th>Hạn mức nhà cung cấp</th><th>Test API</th><th>Gửi email test</th></tr></thead><tbody>{keys.map((key) => {
-          const config = settings.providerConfigs[key.env] || key.config;
-          const percent = Math.round((key.usedToday / Math.max(config.dailyLimit, 1)) * 100);
-          return <tr key={key.env}>
-            <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : "Chưa cấu hình"}</span></td>
-            <td data-label="API key"><code>{key.env}</code></td><td data-label="Free/ngày">{key.freeDaily}</td><td data-label="Free/tháng">{key.freeMonthly}</td>
-            <td data-label="Khoảng cách (giây)"><input className="input" type="number" min="1" max="86400" aria-label={`Khoảng cách ${key.provider}`} value={config.delaySeconds} onChange={(e) => updateConfig(key.env, { delaySeconds: Number(e.target.value) })} /></td>
-            <td data-label="Tối đa/ngày"><input className="input" type="number" min="1" max="1000000" aria-label={`Hạn mức ngày ${key.provider}`} value={config.dailyLimit} onChange={(e) => updateConfig(key.env, { dailyLimit: Number(e.target.value) })} /></td>
-            <td data-label="Đã dùng / ngưỡng xoay">{key.usedToday} / {key.rotationThreshold} ({percent}%)</td>
-            <td data-label="Hạn mức nhà cung cấp"><input className="input" aria-label={`Hạn mức nhà cung cấp ${key.provider}`} value={config.providerLimit} onChange={(e) => updateConfig(key.env, { providerLimit: e.target.value })} placeholder="Ví dụ: 100/ngày" /></td>
-            <td data-label="Test API"><button className="button secondary" type="button" disabled={!key.configured || testing === key.env} onClick={() => testApi(key.env)}>{testing === key.env ? "Đang test…" : "Test API"}</button></td>
-            <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
-          </tr>;
-        })}</tbody></table></div>
+        <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bảng chính chỉ hiển thị thông tin thao tác nhanh. Bấm “Cài đặt” trong từng provider để xem hạn mức free, usage và chỉnh delay/hạn mức riêng.</div>
+        <div className="field settings-test-recipient"><label htmlFor="testRecipient">Email nhận test</label><input className="input" id="testRecipient" type="email" value={settings.testRecipient} onChange={(e) => setSettings({ ...settings, testRecipient: e.target.value })} placeholder="you@example.com" /><small>Nhập email rồi bấm “Lưu tất cả cấu hình provider”.</small></div>
+        <div className="tablewrap settings-tablewrap"><table className="table settings-table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Test API</th><th>Gửi email test</th></tr></thead><tbody>{keys.map((key) => <tr key={key.env}>
+          <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : "Chưa cấu hình"}</span><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
+          <td data-label="API key"><code>{key.env}</code></td>
+          <td data-label="Test API"><button className="button secondary" type="button" disabled={!key.configured || testing === key.env} onClick={() => testApi(key.env)}>{testing === key.env ? "Đang test…" : "Test API"}</button></td>
+          <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
+        </tr>)}</tbody></table></div>
         <div className="actions"><button className="button" type="submit">Lưu tất cả cấu hình provider</button></div>
       </form>
+      {selectedProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedProvider(null); }}><section className="provider-modal" role="dialog" aria-modal="true" aria-labelledby="provider-modal-title"><div className="provider-modal-header"><div><div className="eyebrow">Provider settings</div><h2 id="provider-modal-title">{selectedProvider.provider}</h2></div><button className="modal-close" type="button" aria-label="Đóng popup" onClick={() => setSelectedProvider(null)}>×</button></div><div className="provider-meta"><span>Free/ngày: <b>{selectedProvider.freeDaily}</b></span><span>Free/tháng: <b>{selectedProvider.freeMonthly}</b></span><span>Đã dùng hôm nay: <b>{selectedProvider.usedToday}</b></span><span>Ngưỡng xoay 90%: <b>{selectedProvider.rotationThreshold}</b></span></div><div className="grid"><div className="field"><label>Khoảng cách giữa 2 email (giây)</label><input className="input" type="number" min="1" max="86400" value={(settings.providerConfigs[selectedProvider.env] || selectedProvider.config).delaySeconds} onChange={(e) => updateConfig(selectedProvider.env, { delaySeconds: Number(e.target.value) })} /></div><div className="field"><label>Tối đa email/ngày</label><input className="input" type="number" min="1" max="1000000" value={(settings.providerConfigs[selectedProvider.env] || selectedProvider.config).dailyLimit} onChange={(e) => updateConfig(selectedProvider.env, { dailyLimit: Number(e.target.value) })} /></div></div><div className="field" style={{ marginTop: 16 }}><label>Hạn mức nhà cung cấp tùy chỉnh</label><input className="input" value={(settings.providerConfigs[selectedProvider.env] || selectedProvider.config).providerLimit} onChange={(e) => updateConfig(selectedProvider.env, { providerLimit: e.target.value })} placeholder="Ví dụ: 100 email/ngày" /></div><div className="actions"><button className="button" type="button" onClick={() => setSelectedProvider(null)}>Xong</button><button className="button secondary" type="button" onClick={() => { setSelectedProvider(null); document.querySelector<HTMLFormElement>(".settings-panel")?.requestSubmit(); }}>Lưu và đóng</button></div></section></div>}
     </>}
   </>;
 }
