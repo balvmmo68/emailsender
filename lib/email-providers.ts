@@ -13,10 +13,13 @@ function fromEmail() {
 }
 
 async function readResponse(response: Response) {
-  const body = await response.json().catch(() => ({}));
+  const rawBody = await response.text();
+  let body: any = {};
+  try { body = rawBody ? JSON.parse(rawBody) : {}; } catch { body = { message: rawBody }; }
   if (!response.ok) {
-    const message = body?.ErrorMessage || body?.message || body?.error || body?.Messages?.flatMap((item: any) => item?.Errors || []).map((item: any) => item?.ErrorMessage || item?.Message).filter(Boolean).join("; ");
-    throw new Error(message || `Provider trả về HTTP ${response.status}`);
+    const message = body?.ErrorMessage || body?.message || body?.error || body?.errors?.map((item: any) => item?.message || item?.detail || String(item)).filter(Boolean).join("; ") || body?.Messages?.flatMap((item: any) => item?.Errors || []).map((item: any) => item?.ErrorMessage || item?.Message).filter(Boolean).join("; ");
+    const providerMessage = message || (rawBody && rawBody.length < 1000 ? rawBody : "");
+    throw new Error(providerMessage ? `${providerMessage} (HTTP ${response.status})` : `Provider trả về HTTP ${response.status}`);
   }
   return body;
 }
