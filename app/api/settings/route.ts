@@ -58,13 +58,18 @@ function getProviderConfigs(row?: { providerConfigsJson?: string | null; provide
 
 function getKeyMetadata(row: { providerConfigsJson?: string | null; providerLimitsJson?: string | null } | undefined, usage: Record<string, number>) {
   const configs = getProviderConfigs(row);
-  return keyDefinitions.map((definition) => ({
-    ...definition,
-    configured: Boolean(process.env[definition.env] && (definition.env !== "MAILJET_API_KEY" || process.env.MAILJET_SECRET_KEY)),
-    config: configs[definition.env],
-    usedToday: usage[definition.env] || 0,
-    rotationThreshold: Math.floor(configs[definition.env].dailyLimit * 0.9),
-  }));
+  return keyDefinitions.map((definition) => {
+    const requiredVariables = definition.env === "MAILJET_API_KEY" ? ["MAILJET_API_KEY", "MAILJET_SECRET_KEY"] : [definition.env];
+    const missingVariables = requiredVariables.filter((variable) => !process.env[variable]);
+    return {
+      ...definition,
+      configured: missingVariables.length === 0,
+      missingVariables,
+      config: configs[definition.env],
+      usedToday: usage[definition.env] || 0,
+      rotationThreshold: Math.floor(configs[definition.env].dailyLimit * 0.9),
+    };
+  });
 }
 
 async function requireAdmin() {

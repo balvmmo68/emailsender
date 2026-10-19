@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import ProviderLogsPanel from "@/components/ProviderLogsPanel";
 
 type ProviderConfig = { delaySeconds: number; dailyLimit: number; providerLimit: string };
-type KeyInfo = { provider: string; url: string; env: string; configured: boolean; freeDaily: string; freeMonthly: string; config: ProviderConfig; usedToday: number; rotationThreshold: number };
+type KeyInfo = { provider: string; url: string; env: string; configured: boolean; missingVariables?: string[]; freeDaily: string; freeMonthly: string; config: ProviderConfig; usedToday: number; rotationThreshold: number };
 type Settings = { activeProvider: string; testRecipient: string; providerConfigs: Record<string, ProviderConfig> };
 
 export default function SettingsPage() {
@@ -62,7 +62,7 @@ export default function SettingsPage() {
         <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bảng chính chỉ hiển thị thông tin thao tác nhanh. Bấm “Cài đặt” trong từng provider để xem hạn mức free, usage và chỉnh delay/hạn mức riêng.</div>
         <div className="field settings-test-recipient"><label htmlFor="testRecipient">Email nhận test</label><input className="input" id="testRecipient" type="email" value={settings.testRecipient} onChange={(e) => setSettings({ ...settings, testRecipient: e.target.value })} placeholder="you@example.com" /><small>Nhập email rồi bấm “Lưu tất cả cấu hình provider”.</small></div>
         <div className="tablewrap settings-tablewrap"><table className="table settings-table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Test API</th><th>Gửi email test</th></tr></thead><tbody>{keys.map((key) => <tr key={key.env}>
-          <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : "Chưa cấu hình"}</span><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
+          <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : key.missingVariables?.length ? `Thiếu ${key.missingVariables.join(", ")}` : "Chưa cấu hình"}</span><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
           <td data-label="API key"><code>{key.env}</code></td>
           <td data-label="Test API"><button className="button secondary" type="button" disabled={!key.configured || testing === key.env} onClick={() => testApi(key.env)}>{testing === key.env ? "Đang test…" : "Test API"}</button></td>
           <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
