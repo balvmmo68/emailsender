@@ -17,7 +17,8 @@ async function readResponse(response: Response) {
   let body: any = {};
   try { body = rawBody ? JSON.parse(rawBody) : {}; } catch { body = { message: rawBody }; }
   if (!response.ok) {
-    const message = body?.ErrorMessage || body?.message || body?.error || body?.errors?.map((item: any) => item?.message || item?.detail || String(item)).filter(Boolean).join("; ") || body?.Messages?.flatMap((item: any) => item?.Errors || []).map((item: any) => item?.ErrorMessage || item?.Message).filter(Boolean).join("; ");
+    const validationErrors = body?.errors && !Array.isArray(body.errors) ? Object.entries(body.errors).flatMap(([field, errors]) => (Array.isArray(errors) ? errors : [errors]).map((detail) => `${field}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`)).join("; ") : body?.errors?.map((item: any) => item?.message || item?.detail || String(item)).filter(Boolean).join("; ");
+    const message = body?.ErrorMessage || body?.message || body?.error || validationErrors || body?.Messages?.flatMap((item: any) => item?.Errors || []).map((item: any) => item?.ErrorMessage || item?.Message).filter(Boolean).join("; ");
     const providerMessage = message || (rawBody && rawBody.length < 1000 ? rawBody : "");
     throw new Error(providerMessage ? `${providerMessage} (HTTP ${response.status})` : `Provider trả về HTTP ${response.status}`);
   }
@@ -57,9 +58,9 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
     return body.MessageID as string | undefined;
   }
   if (env === "MAILERSEND_API_TOKEN") {
-    const body = await fetch("https://api.mailersend.com/v1/email", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: { email }, to: [{ email: message.to }], subject: message.subject, html: message.html, text: message.text }) });
-    if (!body.ok) throw new Error(`MailerSend trả về HTTP ${body.status}`);
-    return body.headers.get("x-message-id") || undefined;
+    const response = await fetch("https://api.mailersend.com/v1/email", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: { email }, to: [{ email: message.to }], subject: message.subject, html: message.html, text: message.text }) });
+    await readResponse(response);
+    return response.headers.get("x-message-id") || undefined;
   }
   if (env === "MAILGUN_API_KEY") {
     const domain = process.env.MAILGUN_DOMAIN;
