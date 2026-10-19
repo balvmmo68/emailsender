@@ -51,6 +51,12 @@ export function ensureDatabase() {
       } catch {
         // Column already exists on databases initialized with the latest schema.
       }
+      await client.execute(`CREATE TABLE IF NOT EXISTS provider_usage (
+        provider_env TEXT NOT NULL,
+        usage_date TEXT NOT NULL,
+        sent_count INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (provider_env, usage_date)
+      )`);
       await client.execute(`INSERT OR IGNORE INTO email_settings (id, delay_seconds, daily_limit, updated_at)
         VALUES (1, 10, 100, ${Date.now()})`);
     })().catch((error) => {

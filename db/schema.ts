@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const campaigns = sqliteTable("campaigns", {
   id: text("id").primaryKey(),
@@ -29,3 +29,11 @@ export const emailSettings = sqliteTable("email_settings", {
   providerConfigsJson: text("provider_configs_json").notNull().default("{}"),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const providerUsage = sqliteTable("provider_usage", {
+  providerEnv: text("provider_env").notNull(),
+  usageDate: text("usage_date").notNull(),
+  sentCount: integer("sent_count").notNull().default(0),
+}, (table) => ({
+  providerUsagePk: primaryKey({ columns: [table.providerEnv, table.usageDate] }),
+}));

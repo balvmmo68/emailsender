@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
-import { emailSettings } from "@/db/schema";
+import { emailSettings, providerUsage } from "@/db/schema";
 import { z } from "zod";
 
 const keyDefinitions = [
@@ -55,12 +55,14 @@ function getProviderConfigs(row?: { providerConfigsJson?: string | null; provide
   }));
 }
 
-function getKeyMetadata(row?: { providerConfigsJson?: string | null; providerLimitsJson?: string | null }) {
+function getKeyMetadata(row: { providerConfigsJson?: string | null; providerLimitsJson?: string | null } | undefined, usage: Record<string, number>) {
   const configs = getProviderConfigs(row);
   return keyDefinitions.map((definition) => ({
     ...definition,
     configured: Boolean(process.env[definition.env]),
     config: configs[definition.env],
+    usedToday: usage[definition.env] || 0,
+    rotationThreshold: Math.floor(configs[definition.env].dailyLimit * 0.9),
   }));
 }
 
@@ -74,9 +76,11 @@ export async function GET() {
   await ensureDatabase();
   const row = (await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
   const providerConfigs = getProviderConfigs(row);
+  const usageRows = await db.select().from(providerUsage).where(eq(providerUsage.usageDate, new Date().toISOString().slice(0, 10)));
+  const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
   return NextResponse.json({
     settings: { activeProvider: "RESEND_API_KEY", providerConfigs },
-    keys: getKeyMetadata(row),
+    keys: getKeyMetadata(row, usage),
   });
 }
 
