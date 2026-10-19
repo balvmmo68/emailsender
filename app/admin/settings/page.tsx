@@ -2,11 +2,12 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-type KeyInfo = { provider: string; env: string; configured: boolean; providerLimit: string; freeDaily: string; freeMonthly: string };
-type Settings = { delaySeconds: number; dailyLimit: number; providerLimits: Record<string, string> };
+type ProviderConfig = { delaySeconds: number; dailyLimit: number; providerLimit: string };
+type KeyInfo = { provider: string; env: string; configured: boolean; freeDaily: string; freeMonthly: string; config: ProviderConfig };
+type Settings = { activeProvider: string; providerConfigs: Record<string, ProviderConfig> };
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>({ delaySeconds: 10, dailyLimit: 100, providerLimits: {} });
+  const [settings, setSettings] = useState<Settings>({ activeProvider: "RESEND_API_KEY", providerConfigs: {} });
   const [keys, setKeys] = useState<KeyInfo[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -21,39 +22,28 @@ export default function SettingsPage() {
   }, []);
 
   async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setMessage("");
-    setError("");
+    event.preventDefault(); setMessage(""); setError("");
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Không thể lưu cấu hình"); return; }
-    setKeys(keys.map((key) => ({ ...key, providerLimit: settings.providerLimits[key.env] || "Chưa xác định — nhập hạn mức thủ công" })));
-    setMessage("Đã lưu cấu hình gửi email.");
+    setMessage("Đã lưu cấu hình riêng cho từng dịch vụ.");
   }
 
-  function updateLimit(env: string, value: string) {
-    setSettings({ ...settings, providerLimits: { ...settings.providerLimits, [env]: value } });
+  function updateConfig(env: string, patch: Partial<ProviderConfig>) {
+    setSettings({ ...settings, providerConfigs: { ...settings.providerConfigs, [env]: { ...settings.providerConfigs[env], ...patch } } });
   }
 
   return <>
     <div className="eyebrow">System settings</div>
-    <h1 className="title">Cấu hình gửi email</h1>
-    <p className="sub">Thiết lập tốc độ gửi, hạn mức/ngày và hạn mức riêng của từng nhà cung cấp.</p>
+    <h1 className="title">Cấu hình gửi email theo dịch vụ</h1>
+    <p className="sub">Mỗi API provider có bộ cấu hình riêng, không dùng chung khoảng cách gửi hoặc hạn mức/ngày.</p>
     {message && <div className="notice">{message}</div>}
     {error && <div className="notice error">{error}</div>}
     <form className="panel" onSubmit={save}>
-      <h2>Giới hạn gửi</h2>
-      <div className="grid">
-        <div className="field"><label htmlFor="delaySeconds">Khoảng cách giữa 2 email (giây)</label><input className="input" id="delaySeconds" type="number" min="1" max="86400" value={settings.delaySeconds} onChange={(e) => setSettings({ ...settings, delaySeconds: Number(e.target.value) })} /><small>Giúp giảm nguy cơ bị giới hạn tốc độ bởi nhà cung cấp.</small></div>
-        <div className="field"><label htmlFor="dailyLimit">Tối đa email được gửi trong ngày</label><input className="input" id="dailyLimit" type="number" min="1" max="1000000" value={settings.dailyLimit} onChange={(e) => setSettings({ ...settings, dailyLimit: Number(e.target.value) })} /><small>Đây là hạn mức bảo vệ ở cấp ứng dụng.</small></div>
-      </div>
-      <div className="actions"><button className="button" type="submit">Lưu cấu hình</button></div>
+      <h2>Cấu hình từng dịch vụ</h2>
+      <div className="notice">Giá trị API key không bao giờ được trả về trình duyệt. Các dịch vụ bên dưới đã có cấu hình riêng; logic gửi thực tế hiện vẫn dùng Resend cho đến khi tích hợp adapter tương ứng.</div>
+      <div className="tablewrap"><table className="table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Free/ngày</th><th>Free/tháng</th><th>Khoảng cách (giây)</th><th>Tối đa/ngày</th><th>Hạn mức nhà cung cấp</th></tr></thead><tbody>{keys.map((key) => { const config = settings.providerConfigs[key.env] || key.config; return <tr key={key.env}><td><b>{key.provider}</b><br /><span className="pill">{key.configured ? "Đã cấu hình" : "Chưa cấu hình"}</span></td><td><code>{key.env}</code></td><td>{key.freeDaily}</td><td>{key.freeMonthly}</td><td><input className="input" type="number" min="1" max="86400" aria-label={`Khoảng cách ${key.provider}`} value={config.delaySeconds} onChange={(e) => updateConfig(key.env, { delaySeconds: Number(e.target.value) })} /></td><td><input className="input" type="number" min="1" max="1000000" aria-label={`Hạn mức ngày ${key.provider}`} value={config.dailyLimit} onChange={(e) => updateConfig(key.env, { dailyLimit: Number(e.target.value) })} /></td><td><input className="input" aria-label={`Hạn mức nhà cung cấp ${key.provider}`} value={config.providerLimit} onChange={(e) => updateConfig(key.env, { providerLimit: e.target.value })} placeholder="Ví dụ: 100/ngày" /></td></tr>; })}</tbody></table></div>
+      <div className="actions"><button className="button" type="submit">Lưu tất cả cấu hình provider</button></div>
     </form>
-    <section className="panel">
-      <h2>API key đang được cấu hình</h2>
-      <div className="notice">Chỉ hiển thị tên biến và trạng thái. Giá trị API key không bao giờ được trả về trình duyệt. Hạn mức free là thông tin tham khảo; hãy kiểm tra điều khoản và dashboard thực tế của từng nhà cung cấp trước khi gửi.</div>
-      <div className="tablewrap"><table className="table"><thead><tr><th>Nhà cung cấp</th><th>Biến môi trường</th><th>Trạng thái</th><th>Free/ngày</th><th>Free/tháng</th><th>Hạn mức tùy chỉnh</th></tr></thead><tbody>{keys.map((key) => <tr key={key.env}><td>{key.provider}</td><td><code>{key.env}</code></td><td><span className="pill">{key.configured ? "Đã cấu hình" : "Chưa cấu hình"}</span></td><td>{key.freeDaily}</td><td>{key.freeMonthly}</td><td><input className="input" aria-label={`Hạn mức ${key.provider}`} value={settings.providerLimits[key.env] ?? key.providerLimit} onChange={(e) => updateLimit(key.env, e.target.value)} placeholder="Ví dụ: 100 email/ngày" /></td></tr>)}</tbody></table></div>
-      <div className="actions"><button className="button" type="button" onClick={() => document.querySelector<HTMLFormElement>("form")?.requestSubmit()}>Lưu hạn mức nhà cung cấp</button></div>
-    </section>
   </>;
 }

@@ -26,5 +26,6 @@ export const emailSettings = sqliteTable("email_settings", {
   delaySeconds: integer("delay_seconds").notNull().default(10),
   dailyLimit: integer("daily_limit").notNull().default(100),
   providerLimitsJson: text("provider_limits_json").notNull().default("{}"),
+  providerConfigsJson: text("provider_configs_json").notNull().default("{}"),
   updatedAt: integer("updated_at").notNull(),
 });

@@ -20,13 +20,19 @@ const keyDefinitions = [
   { provider: "AgentMail", env: "AGENTMAIL_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
 ];
 
-const settingsSchema = z.object({
+const providerConfigSchema = z.object({
   delaySeconds: z.number().int().min(1).max(86400),
   dailyLimit: z.number().int().min(1).max(1000000),
-  providerLimits: z.record(z.string().regex(/^[A-Z0-9_]+$/), z.string().trim().max(120)),
+  providerLimit: z.string().trim().max(120),
+});
+const settingsSchema = z.object({
+  activeProvider: z.string().regex(/^[A-Z0-9_]+$/),
+  providerConfigs: z.record(z.string().regex(/^[A-Z0-9_]+$/), providerConfigSchema),
 });
 
-function parseProviderLimits(value: string | null | undefined): Record<string, string> {
+type ProviderConfig = z.infer<typeof providerConfigSchema>;
+
+function parseJson(value: string | null | undefined): Record<string, unknown> {
   if (!value) return {};
   try {
     const parsed = JSON.parse(value);
@@ -36,14 +42,25 @@ function parseProviderLimits(value: string | null | undefined): Record<string, s
   }
 }
 
-function getKeyMetadata(providerLimits: Record<string, string>) {
-  return keyDefinitions.map(({ provider, env }) => ({
-    provider,
-    env,
-    configured: Boolean(process.env[env]),
-    providerLimit: providerLimits[env] || "Chưa xác định — nhập hạn mức thủ công",
-    freeDaily: keyDefinitions.find((item) => item.env === env)?.freeDaily || "Không nêu",
-    freeMonthly: keyDefinitions.find((item) => item.env === env)?.freeMonthly || "Không nêu",
+function getProviderConfigs(row?: { providerConfigsJson?: string | null; providerLimitsJson?: string | null }) {
+  const stored = parseJson(row?.providerConfigsJson);
+  const legacyLimits = parseJson(row?.providerLimitsJson) as Record<string, unknown>;
+  return Object.fromEntries(keyDefinitions.map(({ env }) => {
+    const value = stored[env] as Partial<ProviderConfig> | undefined;
+    return [env, {
+      delaySeconds: value?.delaySeconds || 10,
+      dailyLimit: value?.dailyLimit || 100,
+      providerLimit: value?.providerLimit || String(legacyLimits[env] || ""),
+    } satisfies ProviderConfig];
+  }));
+}
+
+function getKeyMetadata(row?: { providerConfigsJson?: string | null; providerLimitsJson?: string | null }) {
+  const configs = getProviderConfigs(row);
+  return keyDefinitions.map((definition) => ({
+    ...definition,
+    configured: Boolean(process.env[definition.env]),
+    config: configs[definition.env],
   }));
 }
 
@@ -55,12 +72,11 @@ async function requireAdmin() {
 export async function GET() {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await ensureDatabase();
-  const rows = await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1);
-  const row = rows[0];
-  const providerLimits = parseProviderLimits(row?.providerLimitsJson);
+  const row = (await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
+  const providerConfigs = getProviderConfigs(row);
   return NextResponse.json({
-    settings: { delaySeconds: row?.delaySeconds ?? 10, dailyLimit: row?.dailyLimit ?? 100, providerLimits },
-    keys: getKeyMetadata(providerLimits),
+    settings: { activeProvider: "RESEND_API_KEY", providerConfigs },
+    keys: getKeyMetadata(row),
   });
 }
 
@@ -69,11 +85,12 @@ export async function PUT(req: Request) {
   try {
     const input = settingsSchema.parse(await req.json());
     await ensureDatabase();
-    const providerLimitsJson = JSON.stringify(input.providerLimits);
-    await db.insert(emailSettings).values({ id: 1, delaySeconds: input.delaySeconds, dailyLimit: input.dailyLimit, providerLimitsJson, updatedAt: Date.now() })
-      .onConflictDoUpdate({ target: emailSettings.id, set: { delaySeconds: input.delaySeconds, dailyLimit: input.dailyLimit, providerLimitsJson, updatedAt: Date.now() } });
+    const providerLimitsJson = JSON.stringify(Object.fromEntries(Object.entries(input.providerConfigs).map(([env, config]) => [env, config.providerLimit])));
+    const providerConfigsJson = JSON.stringify(input.providerConfigs);
+    await db.insert(emailSettings).values({ id: 1, delaySeconds: 10, dailyLimit: 100, providerLimitsJson, providerConfigsJson, updatedAt: Date.now() })
+      .onConflictDoUpdate({ target: emailSettings.id, set: { providerLimitsJson, providerConfigsJson, updatedAt: Date.now() } });
     return NextResponse.json({ ok: true, settings: input });
   } catch {
-    return NextResponse.json({ error: "Giá trị cấu hình không hợp lệ" }, { status: 400 });
+    return NextResponse.json({ error: "Giá trị cấu hình provider không hợp lệ" }, { status: 400 });
   }
 }

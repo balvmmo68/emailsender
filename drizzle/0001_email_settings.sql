@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS email_settings (
   delay_seconds INTEGER NOT NULL DEFAULT 10,
   daily_limit INTEGER NOT NULL DEFAULT 100,
   provider_limits_json TEXT NOT NULL DEFAULT '{}',
+  provider_configs_json TEXT NOT NULL DEFAULT '{}',
   updated_at INTEGER NOT NULL
 );
 
