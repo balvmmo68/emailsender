@@ -104,6 +104,10 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .table th, .table td { text-align: left; padding: 12px; border-bottom: 1px solid #e8eef3; overflow-wrap: anywhere; }
 .table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
 .pill { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: #e7f6f3; color: var(--teal); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 18px; color: var(--muted); font-size: 13px; }
+.pagination-actions { display: flex; gap: 8px; }
+.pagination .button { min-height: 38px; padding: 8px 12px; font-size: 13px; }
+.pagination .button.disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 .metricrow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .metric { min-width: 0; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
 .metric b { display: block; overflow-wrap: anywhere; font-size: 27px; margin-top: 8px; }
