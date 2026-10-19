@@ -41,3 +41,12 @@ export const providerUsage = sqliteTable("provider_usage", {
 }, (table) => ({
   providerUsagePk: primaryKey({ columns: [table.providerEnv, table.usageDate] }),
 }));
+
+export const providerErrorLogs = sqliteTable("provider_error_logs", {
+  id: text("id").primaryKey(),
+  providerEnv: text("provider_env").notNull(),
+  operation: text("operation").notNull(),
+  recipient: text("recipient"),
+  errorMessage: text("error_message").notNull(),
+  createdAt: integer("created_at").notNull(),
+});

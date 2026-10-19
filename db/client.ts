@@ -73,6 +73,15 @@ export function ensureDatabase() {
         sent_count INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (provider_env, usage_date)
       )`);
+      await client.execute(`CREATE TABLE IF NOT EXISTS provider_error_logs (
+        id TEXT PRIMARY KEY NOT NULL,
+        provider_env TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        recipient TEXT,
+        error_message TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`);
+      await client.execute("CREATE INDEX IF NOT EXISTS provider_error_logs_created_idx ON provider_error_logs(created_at)");
       await client.execute(`INSERT OR IGNORE INTO email_settings (id, delay_seconds, daily_limit, updated_at)
         VALUES (1, 10, 100, ${Date.now()})`);
     })().catch((error) => {

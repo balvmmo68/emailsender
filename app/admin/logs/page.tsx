@@ -1,0 +1,39 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+ type Log = { id: string; providerEnv: string; operation: string; recipient: string | null; errorMessage: string; createdAt: number };
+
+export default function LogsPage() {
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function load(nextPage = page) {
+    const response = await fetch(`/api/logs?page=${nextPage}`);
+    const data = await response.json();
+    if (!response.ok) { setError(data.error || "Không thể tải logs"); return; }
+    setLogs(data.logs); setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
+  }
+
+  useEffect(() => { load(1); }, []);
+
+  async function copyError(value: string) {
+    await navigator.clipboard.writeText(value);
+    setMessage("Đã copy nội dung lỗi.");
+  }
+
+  async function remove(id?: string) {
+    if (!window.confirm(id ? "Xóa log lỗi này?" : "Xóa toàn bộ log lỗi?")) return;
+    const response = await fetch("/api/logs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(id ? { id } : {}) });
+    const data = await response.json();
+    if (!response.ok) { setError(data.error || "Không thể xóa log"); return; }
+    setMessage(id ? "Đã xóa log." : "Đã xóa toàn bộ logs.");
+    load(id && logs.length === 1 && page > 1 ? page - 1 : page);
+  }
+
+  return <><div className="eyebrow">Diagnostics</div><div className="toolbar"><div><h1 className="title">Provider logs</h1><p className="sub">Lịch sử lỗi khi Test API và gửi email test theo từng provider.</p></div><button className="button danger" type="button" disabled={!total} onClick={() => remove()}>Xóa toàn bộ logs</button></div>{message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}<section className="panel"><div className="logs-summary"><h2>Logs lỗi ({total})</h2><span>Trang {page} / {totalPages}</span></div><div className="tablewrap"><table className="table logs-table"><thead><tr><th>Thời gian</th><th>Provider</th><th>Thao tác</th><th>Email nhận</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{logs.length ? logs.map((log) => <tr key={log.id}><td>{new Date(log.createdAt).toLocaleString("vi-VN")}</td><td><code>{log.providerEnv}</code></td><td>{log.operation}</td><td>{log.recipient || "—"}</td><td><span className="log-error">{log.errorMessage}</span></td><td><div className="log-actions"><button className="button secondary" type="button" onClick={() => copyError(log.errorMessage)}>Copy lỗi</button><button className="button danger" type="button" onClick={() => remove(log.id)}>Xóa</button></div></td></tr>) : <tr><td colSpan={6}>Chưa có log lỗi nào.</td></tr>}</tbody></table></div><div className="pagination"><span>Hiển thị tối đa 20 logs mỗi trang</span><div className="pagination-actions"><button className="button secondary" type="button" disabled={page <= 1} onClick={() => load(page - 1)}>← Trước</button><button className="button secondary" type="button" disabled={page >= totalPages} onClick={() => load(page + 1)}>Sau →</button></div></div></section></>;
+}

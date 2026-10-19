@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { sendViaProvider } from "@/lib/email-providers";
+import { recordProviderError } from "@/lib/provider-error-log";
 import { z } from "zod";
 
 const bodySchema = z.object({
@@ -23,6 +24,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, id, provider: parsed.data.env, to: parsed.data.to });
   } catch (error) {
+    await recordProviderError(parsed.data.env, "send-test", error, parsed.data.to).catch(() => undefined);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Gửi email test thất bại" }, { status: 502 });
   }
 }
