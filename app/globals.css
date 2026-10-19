@@ -63,6 +63,10 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .sub { color: var(--muted); margin: 0 0 28px; overflow-wrap: anywhere; }
 .toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 18px; }
 .toolbar-start { min-width: 0; display: flex; align-items: center; gap: 10px; }
+.sidebar-widget { position: fixed; left: 224px; top: 18px; z-index: 30; display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid #c9d5df; border-radius: 12px; background: #fff; box-shadow: 0 6px 18px #102a4324; transition: left 0.2s ease, transform 0.2s ease; }
+.sidebar-widget:hover { transform: translateY(-1px); }
+.sidebar-widget .sidebar-toggle { border: 0; background: transparent; }
+.sidebar-widget .sidebar-toggle:hover { background: #eef5f8; }
 .sidebar-toggle { width: 44px; height: 44px; flex: 0 0 44px; display: inline-grid; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer; }
 .sidebar-toggle:hover { background: #eef5f8; }
 .sidebar-toggle:focus-visible { outline: 3px solid #9bd5d0; outline-offset: 2px; }
@@ -122,6 +126,7 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .sidebar, .main { transition: width 0.2s ease, flex-basis 0.2s ease, margin-left 0.2s ease, padding 0.2s ease; }
 body.sidebar-collapsed .sidebar { width: 0; flex-basis: 0; padding-left: 0; padding-right: 0; overflow: hidden; }
 body.sidebar-collapsed .main { margin-left: 0; }
+body.sidebar-collapsed .sidebar-widget { left: 12px; }
 .fileinput { border: 1px dashed #98acbd; border-radius: 10px; padding: 20px; background: #fbfdfe; }
 .fileinput input { max-width: 100%; }
 .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
@@ -142,11 +147,13 @@ body.sidebar-collapsed .main { margin-left: 0; }
   body { overflow: auto; }
   .shell { display: block; }
   .sidebar { position: static; width: 100%; height: auto; max-height: none; overflow: visible; padding: 18px 16px 14px; }
+  .sidebar-widget { left: 12px; right: auto; top: 12px; width: 48px; height: 48px; }
   .nav { display: flex; gap: 6px; margin-top: 18px; overflow-x: auto; padding-bottom: 2px; }
   .nav a { flex: 0 0 auto; min-height: 44px; display: inline-flex; align-items: center; }
   .side-note { display: none; }
   .main { height: auto; min-height: 0; margin-left: 0; overflow: visible; padding: 22px 16px 32px; }
   body.sidebar-collapsed .sidebar { width: 0; height: 0; padding-top: 0; padding-bottom: 0; }
+  body.sidebar-collapsed .sidebar-widget { left: 12px; }
   .toolbar { align-items: stretch; }
   .toolbar > * { max-width: 100%; }
   .toolbar .button { width: 100%; }
