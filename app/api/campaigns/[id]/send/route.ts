@@ -10,7 +10,7 @@ import { hasProviderDailyCapacity, isDefinitiveProviderRejection, providerDailyA
 import { recordProviderError } from "@/lib/provider-error-log";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
-const actionSchema = z.object({ action: z.enum(["start", "pause", "resume", "stop", "tick"]) });
+const actionSchema = z.object({ action: z.enum(["start", "pause", "resume", "stop", "tick", "select-provider"]), providerEnv: z.string().nullable().optional() });
 const runnableStates = ["draft", "paused", "stopped"] as const;
 const CLAIM_LEASE_MS = 120_000;
 const PROVIDER_SWITCH_DELAY_MS = 60_000;
@@ -62,6 +62,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     cursor: campaign.sendCursor,
     total: campaign.recipientCount,
     currentProviderEnv,
+    selectedProviderEnv: campaign.selectedProviderEnv || null,
     disabledCurrentProviderEnv,
     pendingProviderEnv: campaign.pendingProviderEnv || null,
     providerSwitchAfter: campaign.providerSwitchAfter || null,
@@ -198,6 +199,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   const action = parsed.data.action;
 
+  if (action === "select-provider") {
+    if (campaign.sendStatus === "sending") return NextResponse.json({ error: "Hãy tạm dừng campaign trước khi đổi API provider." }, { status: 409 });
+    const providerEnv = parsed.data.providerEnv || null;
+    if (providerEnv && !(supportedProviderEnvs as readonly string[]).includes(providerEnv)) return NextResponse.json({ error: "API provider không hợp lệ." }, { status: 400 });
+    if (providerEnv) {
+      const settings = (await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
+      const configs = parseObject(settings?.providerConfigsJson);
+      if (!isProviderConfigured(providerEnv) || !isProviderEnabled(configs, providerEnv)) return NextResponse.json({ error: "Provider chưa được cấu hình đầy đủ hoặc đang tắt." }, { status: 400 });
+    }
+    const selection = await client.execute({
+      sql: "UPDATE campaigns SET selected_provider_env = ?, pending_provider_env = NULL, provider_switch_after = NULL, updated_at = ? WHERE id = ? AND send_status <> 'sending'",
+      args: [providerEnv, Date.now(), id],
+    });
+    if (selection.rowsAffected !== 1) return NextResponse.json({ error: "Campaign vừa bắt đầu gửi hoặc không còn khả dụng. Hãy làm mới rồi thử lại." }, { status: 409 });
+    campaign = await getCampaign(id);
+    return NextResponse.json({ status: campaign?.sendStatus, selectedProviderEnv: campaign?.selectedProviderEnv || null });
+  }
+
   if (action === "pause") {
     await client.execute({
       sql: `UPDATE campaigns SET send_status = 'paused', updated_at = ? WHERE id = ? AND send_status = 'sending'
@@ -301,7 +320,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const usageDate = new Date().toISOString().slice(0, 10);
     const usageRows = await db.select().from(providerUsage).where(eq(providerUsage.usageDate, usageDate));
     const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
-    const candidates = supportedProviderEnvs.filter((env) => isProviderConfigured(env) && isProviderEnabled(configs, env)).sort((a, b) => {
+    const candidates = supportedProviderEnvs.filter((env) => (!campaign.selectedProviderEnv || env === campaign.selectedProviderEnv) && isProviderConfigured(env) && isProviderEnabled(configs, env)).sort((a, b) => {
       const aLimit = Number(configs[a]?.dailyLimit || 100);
       const bLimit = Number(configs[b]?.dailyLimit || 100);
       return (usage[a] || 0) / aLimit - (usage[b] || 0) / bLimit;

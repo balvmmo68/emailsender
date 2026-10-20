@@ -166,6 +166,13 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .campaign-current-provider { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-bottom: 14px; padding: 12px 14px; border-left: 3px solid var(--teal); border-radius: 7px; background: #eff8f7; }
 .campaign-current-provider b { color: var(--teal); font-size: 16px; }
 .campaign-current-provider > span:last-child { color: var(--muted); font-size: 12px; }
+.campaign-provider-selection { display: grid; flex: 1 0 100%; gap: 8px; margin-top: 8px; }
+.campaign-provider-selection .sub { margin: 0; font-size: 12px; line-height: 1.5; }
+.campaign-provider-option { display: flex; align-items: center; gap: 9px; width: fit-content; max-width: 100%; color: var(--ink); font-size: 13px; cursor: pointer; }
+.campaign-provider-option input { accent-color: var(--teal); }
+.campaign-provider-option input:disabled { cursor: not-allowed; }
+.campaign-provider-selection small { color: var(--muted); font-size: 11px; }
+.campaign-provider-selection .notice { font-size: 12px; }
 .campaign-provider-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
 .campaign-provider-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
 .campaign-provider-card.is-current { border-color: #53aaa2; box-shadow: 0 0 0 1px #53aaa233; }

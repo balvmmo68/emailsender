@@ -13,6 +13,7 @@ export const campaigns = sqliteTable("campaigns", {
   pendingProviderEnv: text("pending_provider_env"),
   providerSwitchAfter: integer("provider_switch_after"),
   activeProviderEnv: text("active_provider_env"),
+  selectedProviderEnv: text("selected_provider_env"),
   providerFailureEnv: text("provider_failure_env"),
   providerFailureCount: integer("provider_failure_count").notNull().default(0),
   providerFailureStartCursor: integer("provider_failure_start_cursor"),
