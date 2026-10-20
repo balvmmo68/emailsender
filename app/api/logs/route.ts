@@ -4,6 +4,8 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
 import { providerErrorLogs } from "@/db/schema";
+import { z } from "zod";
+import { rejectCrossOrigin } from "@/lib/request-security";
 
 async function requireAdmin() {
   const session = await auth();
@@ -26,9 +28,13 @@ export async function GET(req: Request) {
 
 export async function DELETE(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   await ensureDatabase();
-  const body = await req.json().catch(() => ({}));
-  if (typeof body.id === "string" && body.id) await db.delete(providerErrorLogs).where(eq(providerErrorLogs.id, body.id));
-  else await db.delete(providerErrorLogs);
+  const parsed = z.object({ id: z.string().min(1).optional(), all: z.literal(true).optional() }).strict().safeParse(await req.json().catch(() => null));
+  if (!parsed.success || (parsed.data.id && parsed.data.all)) return NextResponse.json({ error: "Cần chỉ rõ id hoặc all=true." }, { status: 400 });
+  if (parsed.data.id) await db.delete(providerErrorLogs).where(eq(providerErrorLogs.id, parsed.data.id));
+  else if (parsed.data.all === true) await db.delete(providerErrorLogs);
+  else return NextResponse.json({ error: "Cần chỉ rõ id hoặc all=true." }, { status: 400 });
   return NextResponse.json({ ok: true });
 }

@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 
-const client = createClient({
+export const client = createClient({
   url: process.env.TURSO_DATABASE_URL || "file:local.db",
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
@@ -33,8 +33,13 @@ export function ensureDatabase() {
         name TEXT,
         variables_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL DEFAULT 'pending',
+        send_claimed_at INTEGER,
         created_at INTEGER NOT NULL
       )`);
+      const recipientColumns = await client.execute("PRAGMA table_info(recipients)");
+      if (!recipientColumns.rows.some((column) => String(column.name) === "send_claimed_at")) {
+        await client.execute("ALTER TABLE recipients ADD COLUMN send_claimed_at INTEGER");
+      }
       await client.execute("CREATE INDEX IF NOT EXISTS recipients_campaign_idx ON recipients(campaign_id)");
       await client.execute(`CREATE TABLE IF NOT EXISTS email_lists (
         id TEXT PRIMARY KEY NOT NULL,

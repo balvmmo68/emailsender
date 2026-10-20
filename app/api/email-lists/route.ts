@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
 import { emailListContacts, emailLists } from "@/db/schema";
+import { rejectCrossOrigin } from "@/lib/request-security";
 
 async function isAdmin() {
   const session = await auth();
@@ -61,6 +62,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   if (!(await isAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   try {
     await ensureDatabase();
     const form = await req.formData();
@@ -71,6 +74,7 @@ export async function POST(req: Request) {
     if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "CSV tối đa 5MB." }, { status: 400 });
 
     const parsed = Papa.parse<Record<string, string>>(await file.text(), { header: true, skipEmptyLines: true, transformHeader: (header) => header.trim().toLowerCase() });
+    if (parsed.errors.length) return NextResponse.json({ error: `CSV có ${parsed.errors.length} lỗi định dạng. Hãy sửa file rồi nhập lại để tránh lưu thiếu dữ liệu.` }, { status: 400 });
     const rows = parsed.data;
     const emailKey = Object.keys(rows[0] || {}).find((key) => key === "email");
     if (!emailKey) return NextResponse.json({ error: "CSV phải có cột email." }, { status: 400 });
@@ -79,15 +83,18 @@ export async function POST(req: Request) {
       const email = (row[emailKey] || "").trim().toLowerCase();
       if (/^\S+@\S+\.\S+$/.test(email) && !unique.has(email)) unique.set(email, { email, name: row.name?.trim() || null });
     }
-    const contacts = Array.from(unique.values()).slice(0, 10000);
+    if (unique.size > 10000) return NextResponse.json({ error: "CSV có hơn 10.000 email hợp lệ duy nhất. Hãy chia danh sách thành các file nhỏ hơn." }, { status: 413 });
+    const contacts = Array.from(unique.values());
     if (!contacts.length) return NextResponse.json({ error: "CSV không có email hợp lệ." }, { status: 400 });
 
     const listId = randomUUID();
     const now = Date.now();
-    await db.insert(emailLists).values({ id: listId, subject, createdAt: now });
-    for (let offset = 0; offset < contacts.length; offset += 100) {
-      await db.insert(emailListContacts).values(contacts.slice(offset, offset + 100).map((contact) => ({ id: randomUUID(), listId, email: contact.email, name: contact.name, createdAt: now })));
-    }
+    await db.transaction(async (tx) => {
+      await tx.insert(emailLists).values({ id: listId, subject, createdAt: now });
+      for (let offset = 0; offset < contacts.length; offset += 100) {
+        await tx.insert(emailListContacts).values(contacts.slice(offset, offset + 100).map((contact) => ({ id: randomUUID(), listId, email: contact.email, name: contact.name, createdAt: now })));
+      }
+    });
     return NextResponse.json({ ok: true, listId, imported: contacts.length, skipped: rows.length - contacts.length });
   } catch (error) {
     console.error("[email-lists] Không thể nhập CSV vào Turso:", error);

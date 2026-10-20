@@ -10,14 +10,11 @@ function normalizeEmails(value?: string | null) {
     .filter(Boolean);
 }
 
-// ADMIN_EMAIL vẫn được hỗ trợ để không làm hỏng deployment hiện tại.
-export const ADMIN_EMAILS = Array.from(
-  new Set([
-    ...DEFAULT_ADMIN_EMAILS,
-    ...normalizeEmails(process.env.ADMIN_EMAILS),
-    ...normalizeEmails(process.env.ADMIN_EMAIL),
-  ]),
-);
+// Explicit deployment config replaces the built-in fallback so old admins can be revoked.
+const configuredAdmins = process.env.ADMIN_EMAILS ?? process.env.ADMIN_EMAIL;
+export const ADMIN_EMAILS = Array.from(new Set(
+  configuredAdmins === undefined ? DEFAULT_ADMIN_EMAILS : normalizeEmails(configuredAdmins),
+));
 
 export function isAdminEmail(email?: string | null) {
   return Boolean(email && ADMIN_EMAILS.includes(email.trim().toLowerCase()));

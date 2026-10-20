@@ -21,6 +21,7 @@ export const recipients = sqliteTable("recipients", {
   name: text("name"),
   variablesJson: text("variables_json").notNull().default("{}"),
   status: text("status").notNull().default("pending"),
+  sendClaimedAt: integer("send_claimed_at"),
   createdAt: integer("created_at").notNull(),
 });
 

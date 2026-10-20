@@ -58,7 +58,7 @@ export default function ProviderLogsPanel() {
 
   async function remove(id?: string) {
     if (!window.confirm(id ? "Xóa log lỗi này?" : "Xóa toàn bộ log lỗi?")) return;
-    const response = await fetch("/api/logs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(id ? { id } : {}) });
+    const response = await fetch("/api/logs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify(id ? { id } : { all: true }) });
     const data = await response.json();
     if (!response.ok) { setError(data.error || "Không thể xóa log"); return; }
     setMessage(id ? "Đã xóa log." : "Đã xóa toàn bộ logs.");

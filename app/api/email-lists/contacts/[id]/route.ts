@@ -4,10 +4,13 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
 import { emailListContacts } from "@/db/schema";
+import { rejectCrossOrigin } from "@/lib/request-security";
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!isAdminEmail(session?.user?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   const { id } = await params;
   try {
     await ensureDatabase();

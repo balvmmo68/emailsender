@@ -5,6 +5,8 @@ import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
 import { emailSettings, providerUsage } from "@/db/schema";
 import { z } from "zod";
+import { rejectCrossOrigin } from "@/lib/request-security";
+import { providerDailyAllowance } from "@/lib/provider-quota";
 
 const keyDefinitions = [
   { provider: "Resend", url: "https://resend.com", env: "RESEND_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
@@ -25,10 +27,16 @@ const providerConfigSchema = z.object({
   dailyLimit: z.number().int().min(1).max(1000000),
   providerLimit: z.string().trim().max(120),
 });
+const knownProviderEnvs = new Set(keyDefinitions.map(({ env }) => env));
 const settingsSchema = z.object({
   activeProvider: z.string().regex(/^[A-Z0-9_]+$/),
   testRecipient: z.union([z.literal(""), z.string().email()]),
   providerConfigs: z.record(z.string().regex(/^[A-Z0-9_]+$/), providerConfigSchema),
+}).superRefine((input, context) => {
+  if (!knownProviderEnvs.has(input.activeProvider)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["activeProvider"], message: "Provider không hợp lệ" });
+  for (const env of Object.keys(input.providerConfigs)) {
+    if (!knownProviderEnvs.has(env)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["providerConfigs", env], message: "Provider không được hỗ trợ" });
+  }
 });
 
 type ProviderConfig = z.infer<typeof providerConfigSchema>;
@@ -67,7 +75,7 @@ function getKeyMetadata(row: { providerConfigsJson?: string | null; providerLimi
       missingVariables,
       config: configs[definition.env],
       usedToday: usage[definition.env] || 0,
-      rotationThreshold: Math.floor(configs[definition.env].dailyLimit * 0.9),
+      rotationThreshold: providerDailyAllowance(configs[definition.env].dailyLimit),
     };
   });
 }
@@ -92,6 +100,8 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   try {
     const input = settingsSchema.parse(await req.json());
     await ensureDatabase();

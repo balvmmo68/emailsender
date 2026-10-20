@@ -7,6 +7,7 @@ import { count, desc, like, or } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { rejectCrossOrigin } from "@/lib/request-security";
 
 const schema = z.object({
   name: z.string().min(1).max(120),
@@ -43,6 +44,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = await auth();
   if (!isAdminEmail(session?.user?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
   try {
     await ensureDatabase();
     const form = await req.formData();
@@ -57,13 +60,15 @@ export async function POST(req: Request) {
 
     const id = randomUUID();
     const now = Date.now();
-    await db.insert(campaigns).values({ id, name: parsed.name, subject: parsed.subject, htmlContent: parsed.html, textContent: parsed.text, recipientCount: contacts.length, createdAt: now, updatedAt: now });
-    for (let offset = 0; offset < contacts.length; offset += 100) {
-      await db.insert(recipients).values(contacts.slice(offset, offset + 100).map((contact) => ({
-        id: randomUUID(), campaignId: id, email: contact.email, name: contact.name,
-        variablesJson: JSON.stringify({ email: contact.email, name: contact.name || "" }), status: "pending", createdAt: now,
-      })));
-    }
+    await db.transaction(async (tx) => {
+      await tx.insert(campaigns).values({ id, name: parsed.name, subject: parsed.subject, htmlContent: parsed.html, textContent: parsed.text, recipientCount: contacts.length, createdAt: now, updatedAt: now });
+      for (let offset = 0; offset < contacts.length; offset += 100) {
+        await tx.insert(recipients).values(contacts.slice(offset, offset + 100).map((contact) => ({
+          id: randomUUID(), campaignId: id, email: contact.email, name: contact.name,
+          variablesJson: JSON.stringify({ email: contact.email, name: contact.name || "" }), status: "pending", createdAt: now,
+        })));
+      }
+    });
     return NextResponse.json({ id, count: contacts.length });
   } catch (error) {
     console.error("[campaigns] Không thể tạo campaign:", error);

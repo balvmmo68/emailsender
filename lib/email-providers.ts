@@ -25,7 +25,7 @@ async function readResponse(response: Response) {
   return body;
 }
 
-export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY", "AGENTMAIL_API_KEY"];
+export const supportedProviderEnvs = ["RESEND_API_KEY", "BREVO_API_KEY", "MAILJET_API_KEY", "MAILTRAP_API_TOKEN", "MAILGUN_API_KEY", "POSTMARK_SERVER_TOKEN", "MAILERSEND_API_TOKEN", "SMTP2GO_API_KEY", "MAILOFLY_API_KEY", "AGENTMAIL_API_KEY"] as const;
 
 async function resolveAgentMailInboxId(key: string) {
   const configuredInbox = process.env.AGENTMAIL_INBOX_ID?.trim();
