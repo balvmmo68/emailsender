@@ -279,12 +279,19 @@ export default function EmailPage() {
           <button className="button secondary" type="button" disabled={listsData.page >= listsData.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Sau →</button>
         </div></div>}
       </section>
-    </> : <section className="panel">
-      <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
-        <div><button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button><h2 style={{ marginTop: 16 }}>{selectedList.subject}</h2><p className="sub">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này.</p></div>
-        <div className="logs-toolbar-actions"><button className="button" type="button" disabled={sendingCsv || loading || !(contactsData?.total ?? selectedList.emailCount)} onClick={sendListCsv}>{sendingCsv ? "Đang gửi CSV…" : "Gửi CSV qua email"}</button><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div><RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
+    </> : <section className="panel email-detail-panel">
+      <div className="email-detail-header">
+        <div className="email-detail-heading">
+          <button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button>
+          <div><h2>{selectedList.subject}</h2><p className="email-count">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này</p></div>
         </div>
-      <div className="panel" style={{ margin: "16px 0", background: "var(--surface, #fff)" }}>
+        <button className="button" type="button" disabled={sendingCsv || loading || !(contactsData?.total ?? selectedList.emailCount)} onClick={sendListCsv}>{sendingCsv ? "Đang gửi CSV…" : "Gửi CSV qua email"}</button>
+      </div>
+      <div className="email-detail-tools">
+        <div className="field email-search-field"><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div>
+        <RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} />
+      </div>
+      <div className="email-update-panel">
         <h3>Cập nhật danh sách từ CSV</h3>
         <p className="sub">Xem trước số email hợp lệ và lỗi trước khi xác nhận. Khi xác nhận, danh sách hiện tại sẽ được thay bằng email hợp lệ trong file; email lỗi và trùng lặp sẽ bị bỏ qua.</p>
         <form onSubmit={previewReplacement}>

@@ -109,6 +109,17 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .table th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
 .email-topic-link { border: 0; padding: 0; background: transparent; color: var(--teal); font-weight: 750; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .email-topic-link:hover { color: #0b5c56; }
+.email-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.email-detail-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.email-detail-heading h2 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }
+.email-count { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.email-detail-header > .button { flex: 0 0 auto; }
+.email-detail-tools { display: flex; align-items: end; gap: 10px; margin-bottom: 16px; }
+.email-search-field { flex: 1 1 280px; max-width: 440px; }
+.email-update-panel { margin: 0 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
+.email-update-panel h3 { margin: 0 0 6px; font-size: 16px; }
+.email-update-panel > .sub { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.email-update-panel .actions { margin-top: 10px; }
 .pill { display: inline-flex; padding: 4px 8px; border-radius: 999px; background: #e7f6f3; color: var(--teal); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .pill-danger { background: #fde8e8; color: #c53030; }
 .send-controls-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -197,6 +208,12 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
   .metric b { font-size: 24px; }
   .actions { align-items: stretch; }
   .actions .button { flex: 1 1 160px; }
+  .email-detail-header { align-items: stretch; flex-direction: column; }
+  .email-detail-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .email-detail-header > .button, .email-detail-tools > .refresh-button { width: 100%; }
+  .email-detail-tools { align-items: stretch; flex-direction: column; }
+  .email-search-field { max-width: none; }
+  .email-update-panel { padding: 14px; }
   .login { padding: 16px; }
   .loginbox { padding: 24px 18px; }
   .fileinput { padding: 14px; }
