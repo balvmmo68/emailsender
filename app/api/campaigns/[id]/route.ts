@@ -33,8 +33,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await params;
   await ensureDatabase();
-  const campaign = (await db.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.id, id)).limit(1))[0];
+  const campaign = (await db.select({ id: campaigns.id, sendStatus: campaigns.sendStatus }).from(campaigns).where(eq(campaigns.id, id)).limit(1))[0];
   if (!campaign) return NextResponse.json({ error: "Campaign không tồn tại" }, { status: 404 });
+  if (campaign.sendStatus === "sending") return NextResponse.json({ error: "Không thể xóa campaign đang gửi. Hãy tạm dừng hoặc dừng campaign trước." }, { status: 409 });
   await db.delete(recipients).where(eq(recipients.campaignId, id));
   await db.delete(campaigns).where(eq(campaigns.id, id));
   return NextResponse.json({ ok: true });
