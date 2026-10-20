@@ -145,6 +145,11 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .send-status-sending { background: #fff4d6; color: #9a6700; }
 .send-status-paused, .send-status-stopped { background: #fde8e8; color: #c53030; }
 .send-status-completed { background: #e7f6f3; color: var(--teal); }
+.campaign-resend-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-color: #b9e4df; background: #f4fbf9; }
+.campaign-resend-panel h2 { margin: 0 0 5px; font-size: 17px; }
+.campaign-resend-panel .sub { margin: 0 0 5px; }
+.campaign-resend-panel small { color: var(--muted); font-size: 12px; }
+.campaign-resend-error { flex-basis: 100%; margin-top: 0; }
 .send-progress { position: relative; height: 30px; display: flex; align-items: center; margin-top: 18px; overflow: hidden; border-radius: 7px; background: #edf2f6; color: var(--muted); font-size: 12px; font-weight: 700; }
 .send-progress span { position: relative; z-index: 1; width: 100%; text-align: center; }
 .send-progress-bar { position: absolute; inset: 0 auto 0 0; min-width: 0; background: #b9e4df; transition: width 0.25s ease; }
@@ -311,6 +316,7 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
   .provider-meta { grid-template-columns: 1fr; }
   .send-controls-header { display: block; }
   .send-controls-header > .pill { margin-top: 12px; }
+  .campaign-resend-panel { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

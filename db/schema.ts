@@ -17,6 +17,8 @@ export const campaigns = sqliteTable("campaigns", {
   providerFailureEnv: text("provider_failure_env"),
   providerFailureCount: integer("provider_failure_count").notNull().default(0),
   providerFailureStartCursor: integer("provider_failure_start_cursor"),
+  completedAt: integer("completed_at"),
+  lastResentAt: integer("last_resent_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

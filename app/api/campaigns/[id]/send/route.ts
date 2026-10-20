@@ -235,6 +235,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           ? tx.update(campaigns).set({
             sendCursor: campaign.sendCursor + 1,
             sendStatus: campaign.sendCursor + 1 >= campaign.recipientCount ? "completed" : campaign.sendStatus,
+            completedAt: campaign.sendCursor + 1 >= campaign.recipientCount ? Date.now() : campaign.completedAt,
             sendError: null,
             updatedAt: Date.now(),
           })
@@ -293,7 +294,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (current?.status === "sent") {
         const nextCursor = campaign.sendCursor + 1;
         const recovered = await db.update(campaigns)
-          .set({ sendCursor: nextCursor, sendStatus: nextCursor >= campaign.recipientCount ? "completed" : "sending", sendError: null, updatedAt: Date.now() })
+          .set({ sendCursor: nextCursor, sendStatus: nextCursor >= campaign.recipientCount ? "completed" : "sending", completedAt: nextCursor >= campaign.recipientCount ? Date.now() : campaign.completedAt, sendError: null, updatedAt: Date.now() })
           .where(and(eq(campaigns.id, id), eq(campaigns.sendCursor, campaign.sendCursor), inArray(campaigns.sendStatus, runnableStates)));
         if (!recovered.rowsAffected) return NextResponse.json({ error: "Campaign vừa thay đổi trạng thái; hãy làm mới rồi thử lại." }, { status: 409 });
         campaign = await getCampaign(id);
@@ -316,7 +317,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (campaign.sendStatus !== "sending") return responseFor(campaign);
   const recipient = await recipientAtCursor(id, campaign.sendCursor);
   if (!recipient) {
-    await db.update(campaigns).set({ sendStatus: "completed", providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: Date.now() })
+    const completedAt = Date.now();
+    await db.update(campaigns).set({ sendStatus: "completed", completedAt, providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: completedAt })
       .where(and(eq(campaigns.id, id), eq(campaigns.sendStatus, "sending")));
     campaign = await getCampaign(id);
     return campaign ? responseFor(campaign, { done: true }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -520,7 +522,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .where(and(eq(recipients.id, recipient.id), eq(recipients.status, "sending")));
           if (sentRecipient.rowsAffected !== 1) throw new Error("RECIPIENT_STATE_CONFLICT");
           const advanced = await tx.update(campaigns)
-            .set({ sendCursor: cursorBeforeSend + 1, pendingProviderEnv: null, providerSwitchAfter: null, activeProviderEnv: env, providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: Date.now() })
+        .set({ sendCursor: cursorBeforeSend + 1, sendStatus: cursorBeforeSend + 1 >= campaign.recipientCount ? "completed" : "sending", completedAt: cursorBeforeSend + 1 >= campaign.recipientCount ? Date.now() : campaign.completedAt, pendingProviderEnv: null, providerSwitchAfter: null, activeProviderEnv: env, providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: Date.now() })
             .where(and(eq(campaigns.id, id), eq(campaigns.sendCursor, cursorBeforeSend), eq(campaigns.sendStatus, "sending")));
           if (advanced.rowsAffected !== 1) throw new Error("CAMPAIGN_STATE_CONFLICT");
         });

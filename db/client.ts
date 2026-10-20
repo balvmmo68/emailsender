@@ -30,6 +30,8 @@ export function ensureDatabase() {
         provider_failure_env TEXT,
         provider_failure_count INTEGER NOT NULL DEFAULT 0,
         provider_failure_start_cursor INTEGER,
+        completed_at INTEGER,
+        last_resent_at INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )`);
@@ -72,6 +74,8 @@ export function ensureDatabase() {
         ["campaigns", "provider_failure_env", "ALTER TABLE campaigns ADD COLUMN provider_failure_env TEXT"],
         ["campaigns", "provider_failure_count", "ALTER TABLE campaigns ADD COLUMN provider_failure_count INTEGER NOT NULL DEFAULT 0"],
         ["campaigns", "provider_failure_start_cursor", "ALTER TABLE campaigns ADD COLUMN provider_failure_start_cursor INTEGER"],
+        ["campaigns", "completed_at", "ALTER TABLE campaigns ADD COLUMN completed_at INTEGER"],
+        ["campaigns", "last_resent_at", "ALTER TABLE campaigns ADD COLUMN last_resent_at INTEGER"],
         ["recipients", "send_claimed_at", "ALTER TABLE recipients ADD COLUMN send_claimed_at INTEGER"],
         ["recipients", "provider_env", "ALTER TABLE recipients ADD COLUMN provider_env TEXT"],
       ];
@@ -79,6 +83,7 @@ export function ensureDatabase() {
         const tableInfo = await client.execute(`PRAGMA table_info(${table})`);
         if (!tableInfo.rows.some((row) => String(row.name) === column)) await client.execute(statement);
       }
+      await client.execute("UPDATE campaigns SET completed_at = updated_at WHERE send_status = 'completed' AND completed_at IS NULL");
       await client.execute(`CREATE TABLE IF NOT EXISTS email_settings (
         id INTEGER PRIMARY KEY NOT NULL,
         delay_seconds INTEGER NOT NULL DEFAULT 10,

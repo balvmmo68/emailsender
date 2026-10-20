@@ -7,6 +7,7 @@ import EditCampaignForm from "@/components/EditCampaignForm";
 import CampaignSendControls from "@/components/CampaignSendControls";
 import CampaignProviderStatus from "@/components/CampaignProviderStatus";
 import CampaignDetailTabs from "@/components/CampaignDetailTabs";
+import CampaignResendButton from "@/components/CampaignResendButton";
 
 const PAGE_SIZE = 25;
 
@@ -27,6 +28,7 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   const people = await db.select().from(recipients).where(eq(recipients.campaignId, id)).orderBy(desc(recipients.createdAt)).limit(PAGE_SIZE).offset((currentPage - 1) * PAGE_SIZE);
 
   const management = <>
+    {campaign.sendStatus === "completed" && <CampaignResendButton campaignId={id} campaignName={campaign.name} completedAt={campaign.completedAt ?? campaign.updatedAt} lastResentAt={campaign.lastResentAt} />}
     <CampaignProviderStatus campaignId={id} />
     <CampaignSendControls campaignId={id} initialStatus={campaign.sendStatus as "draft" | "sending" | "paused" | "stopped" | "completed"} initialCursor={campaign.sendCursor} total={campaign.recipientCount} />
     <EditCampaignForm campaign={campaign} />
