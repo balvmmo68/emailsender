@@ -2,11 +2,15 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 
-type EmailContact = { id: string; listId: string; email: string; name: string | null; subject: string; createdAt: number };
-type EmailListResponse = { contacts: EmailContact[]; page: number; pageSize: number; total: number; totalPages: number };
+type EmailListSummary = { id: string; subject: string; createdAt: number; emailCount: number };
+type EmailContact = { id: string; email: string; name: string | null; createdAt: number };
+type Paged<T> = { page: number; pageSize: number; total: number; totalPages: number };
+type ListResponse = Paged<EmailListSummary> & { lists: EmailListSummary[] };
+type ContactResponse = Paged<EmailContact> & { list: { id: string; subject: string; createdAt: number }; contacts: EmailContact[] };
 const numberFormat = new Intl.NumberFormat("vi-VN");
 
 export default function EmailPage() {
+  const [selectedList, setSelectedList] = useState<EmailListSummary | null>(null);
   const [subject, setSubject] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
@@ -15,30 +19,33 @@ export default function EmailPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [data, setData] = useState<EmailListResponse | null>(null);
+  const [listsData, setListsData] = useState<ListResponse | null>(null);
+  const [contactsData, setContactsData] = useState<ContactResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    const params = new URLSearchParams({ search, page: String(page) });
+    if (selectedList) params.set("listId", selectedList.id);
     const timer = setTimeout(async () => {
       setLoading(true);
       setError("");
       try {
-        const params = new URLSearchParams({ search, page: String(page) });
         const response = await fetch(`/api/email-lists?${params}`, { signal: controller.signal, cache: "no-store" });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || "Không thể tải email.");
-        setData(result as EmailListResponse);
+        if (!response.ok) throw new Error(result.error || "Không thể tải dữ liệu email.");
+        if (selectedList) setContactsData(result as ContactResponse);
+        else setListsData(result as ListResponse);
       } catch (err) {
-        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Không thể tải email.");
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Không thể tải dữ liệu email.");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 250);
+    }, 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [search, page, refreshKey]);
+  }, [selectedList, search, page, refreshKey]);
 
   async function importCsv(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,12 +60,13 @@ export default function EmailPage() {
       const response = await fetch("/api/email-lists", { method: "POST", body: form });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Không thể lưu email.");
-      setNotice(`Đã nhập ${numberFormat.format(result.imported)} email. Chủ đề: ${subject}.`);
+      setNotice(`Đã nhập ${numberFormat.format(result.imported)} email vào chủ đề “${subject}”.`);
       setSubject("");
       setFile(null);
       setFileKey((current) => current + 1);
       setSearch("");
       setPage(1);
+      setSelectedList(null);
       setRefreshKey((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể nhập file CSV.");
@@ -67,8 +75,16 @@ export default function EmailPage() {
     }
   }
 
+  function openList(list: EmailListSummary) {
+    setNotice("");
+    setSelectedList(list);
+    setSearch("");
+    setPage(1);
+    setContactsData(null);
+  }
+
   async function deleteEmail(contact: EmailContact) {
-    if (!window.confirm(`Xóa địa chỉ ${contact.email} khỏi danh sách?`)) return;
+    if (!window.confirm(`Xóa địa chỉ ${contact.email} khỏi chủ đề “${selectedList?.subject || ""}”?`)) return;
     setDeletingId(contact.id);
     setError("");
     setNotice("");
@@ -77,7 +93,7 @@ export default function EmailPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Không thể xóa email.");
       setNotice(`Đã xóa ${contact.email}.`);
-      if (data?.contacts.length === 1 && page > 1) setPage((current) => current - 1);
+      if (contactsData?.contacts.length === 1 && page > 1) setPage((current) => current - 1);
       else setRefreshKey((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể xóa email.");
@@ -91,39 +107,61 @@ export default function EmailPage() {
     <h1 className="title">Quản lý email</h1>
     <p className="sub">Tạo chủ đề danh sách và lưu địa chỉ từ CSV vào Turso. Trang này chỉ quản lý email, không tạo campaign.</p>
 
-    <section className="panel">
-      <h2>Thêm danh sách email</h2>
-      <p className="sub">Mỗi lần tải CSV sẽ tạo một chủ đề danh sách riêng. CSV cần có cột <code>email</code>; cột <code>name</code> là tùy chọn.</p>
-      <form onSubmit={importCsv}>
-        <div className="grid">
-          <div className="field"><label htmlFor="email-subject">Chủ đề danh sách</label><input id="email-subject" className="input" required maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Ví dụ: Khách hàng tháng 10" /></div>
-          <div className="field"><label htmlFor="email-csv">File CSV</label><input key={fileKey} id="email-csv" className="input" type="file" accept=".csv,text/csv" required onChange={(event) => setFile(event.target.files?.[0] || null)} /><span className="sub" style={{ margin: 0 }}>Tối đa 5MB, tối đa 10.000 email hợp lệ mỗi lần tải.</span></div>
-        </div>
-        <div className="actions"><button className="button" type="submit" disabled={saving}>{saving ? "Đang lưu vào Turso…" : "Tải email lên"}</button></div>
-      </form>
-      {notice && <div className="notice" style={{ marginTop: 14 }}>{notice}</div>}
-      {error && <div className="notice error" style={{ marginTop: 14 }}>{error}</div>}
-    </section>
+    {!selectedList ? <>
+      <section className="panel">
+        <h2>Tạo chủ đề danh sách</h2>
+        <p className="sub">Mỗi lần tải CSV sẽ tạo một chủ đề riêng. CSV cần có cột <code>email</code>; cột <code>name</code> là tùy chọn.</p>
+        <form onSubmit={importCsv}>
+          <div className="grid">
+            <div className="field"><label htmlFor="email-subject">Chủ đề danh sách</label><input id="email-subject" className="input" required maxLength={120} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Ví dụ: Khách hàng tháng 10" /></div>
+            <div className="field"><label htmlFor="email-csv">File CSV</label><input key={fileKey} id="email-csv" className="input" type="file" accept=".csv,text/csv" required onChange={(event) => setFile(event.target.files?.[0] || null)} /><span className="sub" style={{ margin: 0 }}>Tối đa 5MB, nhiều nhất 10.000 email hợp lệ.</span></div>
+          </div>
+          <div className="actions"><button className="button" type="submit" disabled={saving}>{saving ? "Đang lưu vào Turso…" : "Tải danh sách email lên"}</button></div>
+        </form>
+        {notice && <div className="notice" style={{ marginTop: 14 }}>{notice}</div>}
+        {error && <div className="notice error" style={{ marginTop: 14 }}>{error}</div>}
+      </section>
 
-    <section className="panel">
+      <section className="panel">
+        <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
+          <div><h2>Chủ đề danh sách</h2><p className="sub">Chọn một chủ đề để xem toàn bộ email trong danh sách.</p></div>
+          <div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="list-search">Tìm chủ đề</label><input id="list-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Nhập tên chủ đề…" /></div>
+        </div>
+        {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
+        <div className="tablewrap"><table className="table email-list-summary">
+          <thead><tr><th>Chủ đề danh sách</th><th>Tổng email</th></tr></thead>
+          <tbody>
+            {loading ? <tr><td colSpan={2}>Đang tải danh sách từ Turso…</td></tr> : listsData?.lists.length ? listsData.lists.map((list) => <tr key={list.id}>
+              <td><button className="email-topic-link" type="button" onClick={() => openList(list)}>{list.subject}</button></td>
+              <td><span className="pill">{numberFormat.format(list.emailCount)}</span></td>
+            </tr>) : <tr><td colSpan={2}>{search ? "Không tìm thấy chủ đề phù hợp." : "Chưa có chủ đề danh sách nào."}</td></tr>}
+          </tbody>
+        </table></div>
+        {listsData && <div className="pagination"><span>{numberFormat.format(listsData.total)} chủ đề · Trang {listsData.page} / {listsData.totalPages}</span><div className="pagination-actions">
+          <button className="button secondary" type="button" disabled={listsData.page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>← Trước</button>
+          <button className="button secondary" type="button" disabled={listsData.page >= listsData.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Sau →</button>
+        </div></div>}
+      </section>
+    </> : <section className="panel">
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
-        <div><h2>Email đã lưu</h2><p className="sub">Tìm theo địa chỉ, tên hoặc chủ đề; quản lý dữ liệu đã nhập trong Turso.</p></div>
-        <div className="field" style={{ width: "min(100%, 380px)" }}><label htmlFor="email-search">Tìm kiếm email</label><input id="email-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email, tên hoặc chủ đề…" /></div>
+        <div><button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button><h2 style={{ marginTop: 16 }}>{selectedList.subject}</h2><p className="sub">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này.</p></div>
+        <div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div>
       </div>
+      {notice && <div className="notice" style={{ marginBottom: 14 }}>{notice}</div>}
       {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
       <div className="tablewrap"><table className="table">
-        <thead><tr><th>Email</th><th>Tên</th><th>Chủ đề</th><th>Ngày thêm</th><th>Thao tác</th></tr></thead>
+        <thead><tr><th>Email</th><th>Tên</th><th>Ngày thêm</th><th>Thao tác</th></tr></thead>
         <tbody>
-          {loading ? <tr><td colSpan={5}>Đang tải email từ Turso…</td></tr> : data?.contacts.length ? data.contacts.map((contact) => <tr key={contact.id}>
-            <td>{contact.email}</td><td>{contact.name || "—"}</td><td>{contact.subject}</td><td>{new Date(contact.createdAt).toLocaleString("vi-VN")}</td>
+          {loading ? <tr><td colSpan={4}>Đang tải email từ Turso…</td></tr> : contactsData?.contacts.length ? contactsData.contacts.map((contact) => <tr key={contact.id}>
+            <td>{contact.email}</td><td>{contact.name || "—"}</td><td>{new Date(contact.createdAt).toLocaleString("vi-VN")}</td>
             <td><button className="button danger" type="button" disabled={deletingId === contact.id} onClick={() => deleteEmail(contact)}>{deletingId === contact.id ? "Đang xóa…" : "Xóa"}</button></td>
-          </tr>) : <tr><td colSpan={5}>{search ? "Không tìm thấy email phù hợp." : "Chưa có email. Hãy tạo chủ đề và tải CSV lên."}</td></tr>}
+          </tr>) : <tr><td colSpan={4}>{search ? "Không tìm thấy email phù hợp." : "Chủ đề này chưa có email."}</td></tr>}
         </tbody>
       </table></div>
-      {data && <div className="pagination"><span>{numberFormat.format(data.total)} email · Trang {data.page} / {data.totalPages}</span><div className="pagination-actions">
-        <button className="button secondary" type="button" disabled={data.page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>← Trước</button>
-        <button className="button secondary" type="button" disabled={data.page >= data.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Sau →</button>
+      {contactsData && <div className="pagination"><span>{numberFormat.format(contactsData.total)} email · Trang {contactsData.page} / {contactsData.totalPages}</span><div className="pagination-actions">
+        <button className="button secondary" type="button" disabled={contactsData.page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>← Trước</button>
+        <button className="button secondary" type="button" disabled={contactsData.page >= contactsData.totalPages || loading} onClick={() => setPage((current) => current + 1)}>Sau →</button>
       </div></div>}
-    </section>
+    </section>}
   </>;
 }
