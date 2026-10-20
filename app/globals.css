@@ -148,6 +148,10 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .send-progress { position: relative; height: 30px; display: flex; align-items: center; margin-top: 18px; overflow: hidden; border-radius: 7px; background: #edf2f6; color: var(--muted); font-size: 12px; font-weight: 700; }
 .send-progress span { position: relative; z-index: 1; width: 100%; text-align: center; }
 .send-progress-bar { position: absolute; inset: 0 auto 0 0; min-width: 0; background: #b9e4df; transition: width 0.25s ease; }
+.unknown-recipient-panel { margin-top: 14px; padding: 14px; border: 1px solid #f0c36d; border-radius: 9px; background: #fffaf0; color: var(--ink); }
+.unknown-recipient-panel > b { display: block; color: #8a4b08; font-size: 14px; overflow-wrap: anywhere; }
+.unknown-recipient-panel p { margin: 8px 0; color: #6b5a43; font-size: 13px; line-height: 1.5; }
+.unknown-recipient-panel .actions { margin-top: 12px; }
 .campaign-back-link { display: inline-flex; gap: 8px; margin: 0 0 14px; }
 .campaign-back-link svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .campaign-detail-tabs-wrap { margin-top: 24px; }
