@@ -193,7 +193,7 @@ export default function EmailPage() {
             {loading ? <tr><td colSpan={3}>Đang tải danh sách từ Turso…</td></tr> : listsData?.lists.length ? listsData.lists.map((list) => <tr key={list.id}>
               <td><button className="email-topic-link" type="button" onClick={() => openList(list)}>{list.subject}</button></td>
               <td><span className="pill">{numberFormat.format(list.emailCount)}</span></td>
-              <td><button className="button danger" type="button" disabled={deletingId === list.id} onClick={() => deleteList(list)}>{deletingId === list.id ? "Đang xóa…" : "Xóa chủ đề"}</button></td>
+              <td>{list.id === "default-newsletters" ? <span className="pill">Mặc định</span> : <button className="button danger" type="button" disabled={deletingId === list.id} onClick={() => deleteList(list)}>{deletingId === list.id ? "Đang xóa…" : "Xóa chủ đề"}</button>}</td>
             </tr>) : <tr><td colSpan={3}>{search ? "Không tìm thấy chủ đề phù hợp." : "Chưa có chủ đề danh sách nào."}</td></tr>}
           </tbody>
         </table></div>

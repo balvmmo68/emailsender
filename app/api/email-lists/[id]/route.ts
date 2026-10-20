@@ -12,6 +12,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const originError = rejectCrossOrigin(req);
   if (originError) return originError;
   const { id } = await params;
+  if (id === "default-newsletters") return NextResponse.json({ error: "Không thể xóa chủ đề danh sách mặc định Newsletters." }, { status: 403 });
   try {
     await ensureDatabase();
     const [list] = await db.select({ id: emailLists.id }).from(emailLists).where(eq(emailLists.id, id)).limit(1);
