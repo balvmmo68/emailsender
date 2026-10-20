@@ -132,7 +132,7 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .email-detail-heading h2 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }
 .email-count { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .email-detail-header > .button { flex: 0 0 auto; }
-.email-detail-tools { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: end; gap: 10px; margin-bottom: 16px; }
+.email-detail-tools { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto; align-items: end; gap: 10px; margin-bottom: 16px; }
 .email-search-field { min-width: 0; }
 .email-update-panel { margin: 0 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #f8fafc; }
 .email-update-panel h3 { margin: 0 0 6px; font-size: 16px; }

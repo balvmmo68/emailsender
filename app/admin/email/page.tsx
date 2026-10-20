@@ -38,6 +38,7 @@ export default function EmailPage() {
   const [contactsData, setContactsData] = useState<ContactResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [deduplicating, setDeduplicating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sendingCsv, setSendingCsv] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -178,6 +179,30 @@ export default function EmailPage() {
     setRefreshKey((current) => current + 1);
   }
 
+  async function deduplicateList() {
+    if (!selectedList) return;
+    if (!window.confirm(`Lọc trùng trong chủ đề “${selectedList.subject}”? Các email trùng nhau không phân biệt chữ hoa/thường sẽ chỉ giữ lại bản ghi được thêm sớm nhất.`)) return;
+    setDeduplicating(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/email-lists/${encodeURIComponent(selectedList.id)}/deduplicate`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể lọc email trùng.");
+      setNotice(result.removed
+        ? `Đã lọc ${numberFormat.format(result.removed)} email trùng trong “${selectedList.subject}”. Giữ lại ${numberFormat.format(result.kept)} email duy nhất.`
+        : `Không tìm thấy email trùng trong “${selectedList.subject}”. Danh sách có ${numberFormat.format(result.kept)} email duy nhất.`);
+      clearEmailCache();
+      setPage(1);
+      manualRefresh.current = true;
+      setRefreshKey((current) => current + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể lọc email trùng.");
+    } finally {
+      setDeduplicating(false);
+    }
+  }
+
   async function sendListCsv() {
     if (!selectedList) return;
     const count = contactsData?.total ?? selectedList.emailCount;
@@ -289,6 +314,7 @@ export default function EmailPage() {
       <div className="email-detail-tools">
         <div className="field email-search-field"><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div>
         <RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} />
+        <button className="button secondary" type="button" disabled={deduplicating || loading || !(contactsData?.total ?? selectedList.emailCount)} onClick={deduplicateList}>{deduplicating ? "Đang lọc trùng…" : "Lọc email trùng"}</button>
         <button className="button" type="button" disabled={sendingCsv || loading || !(contactsData?.total ?? selectedList.emailCount)} onClick={sendListCsv}>{sendingCsv ? "Đang gửi CSV…" : "Gửi CSV qua email"}</button>
       </div>
       <div className="email-update-panel">
