@@ -39,7 +39,6 @@ export default function HomePage() {
     <header className="public-header">
       <a className="public-brand" href="/" aria-label="Sendroom home"><span className="public-brand-mark">S</span><span>sendroom<span className="brand-period">.</span></span></a>
       <nav className="public-nav" aria-label="Main navigation"><a href="#topics">Topics</a><a href="#about">About</a></nav>
-      <a className="public-admin-link" href="/login">Admin sign in <span aria-hidden="true">↗</span></a>
     </header>
 
     <section className="public-hero" aria-labelledby="hero-title">

@@ -298,10 +298,8 @@ body:has(.public-site) { overflow: auto; background: #f7f8f5; }
 .public-brand { display: inline-flex; align-items: center; gap: 10px; color: var(--p-ink); font-size: 20px; font-weight: 850; letter-spacing: -0.055em; }
 .public-brand-mark { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 10px 10px 10px 3px; background: var(--p-green); color: #fff; font-size: 17px; font-weight: 850; letter-spacing: -0.06em; }
 .brand-period { color: var(--p-green); }
-.public-nav { display: flex; align-items: center; gap: 34px; color: #62716b; font-size: 13px; font-weight: 650; }
+.public-nav { display: flex; align-items: center; gap: 34px; margin-left: auto; color: #62716b; font-size: 13px; font-weight: 650; }
 .public-nav a:hover, .public-footer > a:last-child:hover { color: var(--p-green); }
-.public-admin-link { padding: 10px 14px; border: 1px solid #dce4dd; border-radius: 8px; color: #52615b; font-size: 12px; font-weight: 700; }
-.public-admin-link:hover { border-color: #9bb6aa; color: var(--p-green); }
 .public-hero { position: relative; isolation: isolate; width: min(1180px, calc(100% - 64px)); min-height: 615px; margin: 0 auto; padding: 79px 0 72px; display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(340px, .78fr); align-items: center; gap: clamp(40px, 8vw, 112px); }
 .hero-copy { position: relative; z-index: 1; max-width: 600px; }
 .public-kicker, .section-overline { display: flex; align-items: center; gap: 9px; color: #477365; font-size: 10px; font-weight: 850; letter-spacing: .15em; }
@@ -370,9 +368,8 @@ body:has(.public-site) { overflow: auto; background: #f7f8f5; }
 }
 @media (max-width: 650px) {
   .public-header { width: calc(100% - 36px); height: 68px; }
-  .public-nav { display: none; }
+  .public-nav { gap: 18px; font-size: 12px; }
   .public-brand { font-size: 18px; }.public-brand-mark { width: 29px; height: 29px; }
-  .public-admin-link { padding: 9px 10px; font-size: 10px; }
   .public-hero { width: calc(100% - 36px); display: flex; flex-direction: column; align-items: stretch; gap: 34px; padding: 51px 0 47px; }
   .hero-copy h1 { margin-top: 20px; font-size: clamp(44px, 12vw, 62px); }
   .hero-description { font-size: 14px; }
