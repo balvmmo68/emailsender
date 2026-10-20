@@ -46,6 +46,9 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .nav a { padding: 11px 12px; border-radius: 9px; color: #b9ccda; }
 .nav a:hover, .nav a.active, .nav a:focus-visible { background: #1d4562; color: #fff; }
 .side-note { margin-top: auto; color: #9bb2c4; font-size: 12px; line-height: 1.6; }
+.sidebar-footer { margin-top: auto; padding-top: 14px; border-top: 1px solid #ffffff24; }
+.sidebar-footer .button { width: 100%; min-height: 42px; border: 1px solid #3b647f; background: #1d4562; color: #fff; }
+.sidebar-footer .button:hover { background: #285573; }
 .main {
   flex: 1;
   min-width: 0;

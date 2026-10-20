@@ -13,10 +13,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <div className="brand">Sendroom<small>campaign console</small></div>
       <nav className="nav"><Link className="active" href="/admin">Tổng quan</Link><Link href="/admin/campaigns/new">Tạo campaign</Link><Link href="/admin/email">Email</Link><Link href="/admin/settings">Settings</Link></nav>
       <div className="side-note">MVP an toàn: hiện chỉ gửi email test. Hãy thêm queue và suppression list trước khi gửi số lượng lớn.</div>
+      <div className="sidebar-footer"><LogoutButton /></div>
     </aside>
     <div className="sidebar-widget" aria-label="Điều khiển sidebar"><SidebarToggle /></div>
     <main className="main">
-      <div className="toolbar"><div className="toolbar-start"><div className="userbar">{session.user.email}</div></div><LogoutButton /></div>
+      <div className="toolbar"><div className="toolbar-start"><div className="userbar">{session.user.email}</div></div></div>
       {children}
     </main>
   </div>;
