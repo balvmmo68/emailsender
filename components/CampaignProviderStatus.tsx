@@ -49,7 +49,7 @@ export default function CampaignProviderStatus({ campaignId }: { campaignId: str
   const secondsRemaining = data.providerSwitchAfter ? Math.max(0, Math.ceil((data.providerSwitchAfter - now) / 1000)) : 0;
 
   return <section className="panel campaign-provider-panel">
-    <div className="campaign-provider-heading"><div><h2>Hạn mức email/ngày</h2><p className="sub">Cập nhật tự động mỗi 5 giây. Hạn mức an toàn áp dụng mức đệm nội bộ của hệ thống.</p></div><span className="campaign-provider-live">Live</span></div>
+    <div className="campaign-provider-heading"><div><h2>Hạn mức email/ngày</h2><p className="sub">Cập nhật tự động mỗi 5 giây; số liệu dùng đúng hạn mức provider đã cấu hình.</p></div><span className="campaign-provider-live">Live</span></div>
     <div className="metricrow campaign-quota-metrics">
       <div className="metric"><span className="eyebrow">Hạn mức cấu hình/ngày</span><b>{numberFormat.format(data.dailyLimit)}</b></div>
       <div className="metric"><span className="eyebrow">Đã dùng hôm nay</span><b>{numberFormat.format(data.dailyUsed)}</b></div>

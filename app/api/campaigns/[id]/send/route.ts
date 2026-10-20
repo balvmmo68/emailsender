@@ -247,7 +247,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
     const available = candidates.filter((env) => hasProviderDailyCapacity(usage[env] || 0, configs[env]?.dailyLimit || 100));
     if (!available.length) {
-      await releaseUnsentClaim(id, recipient.id, "Tất cả provider đã gần chạm ngưỡng hạn mức/ngày hoặc chưa cấu hình.");
+      await releaseUnsentClaim(id, recipient.id, "Tất cả provider đã hết hạn mức cấu hình/ngày hoặc chưa cấu hình.");
       campaign = await getCampaign(id);
       return campaign ? responseFor(campaign, { blocked: true }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }

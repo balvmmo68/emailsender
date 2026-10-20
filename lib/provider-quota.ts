@@ -1,10 +1,10 @@
 import { client, ensureDatabase } from "@/db/client";
 
-/** Keep a 10% safety margin, but permit one send when the configured cap is 1. */
+/** Enforce the exact daily cap saved in provider settings. */
 export function providerDailyAllowance(limit: unknown) {
   const parsed = Number(limit);
   const safeLimit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 100;
-  return Math.max(1, Math.floor(safeLimit * 0.9));
+  return safeLimit;
 }
 
 export function hasProviderDailyCapacity(used: number, limit: unknown) {

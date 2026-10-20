@@ -37,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const available = candidates.filter((env) => {
     return hasProviderDailyCapacity(usage[env] || 0, configs[env]?.dailyLimit || 100);
   });
-  if (!available.length) return NextResponse.json({ error: "Tất cả provider đã gần chạm 90% hạn mức/ngày hoặc chưa có adapter gửi." }, { status: 429 });
+  if (!available.length) return NextResponse.json({ error: "Tất cả provider đã hết hạn mức cấu hình/ngày hoặc chưa có adapter gửi." }, { status: 429 });
   const failures: string[] = [];
   for (const env of available) {
     const reserved = await reserveProviderUsage(env, today, configs[env]?.dailyLimit || 100);
