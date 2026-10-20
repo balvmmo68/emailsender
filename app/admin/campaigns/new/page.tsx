@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import RefreshButton from "@/components/RefreshButton";
 
 type CampaignRow = {
   id: string;
@@ -12,6 +13,17 @@ type CampaignRow = {
 };
 type CampaignListResponse = { campaigns: CampaignRow[]; page: number; pageSize: number; total: number; totalPages: number };
 const numberFormat = new Intl.NumberFormat("vi-VN");
+const CAMPAIGN_CACHE_PREFIX = "sender:campaign-list:";
+
+function clearCampaignCache() {
+  try {
+    sessionStorage.removeItem("sender:campaign-dashboard");
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(CAMPAIGN_CACHE_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch { /* Session storage may be unavailable in restricted browsers. */ }
+}
 
 export default function NewCampaign() {
   const [activeTab, setActiveTab] = useState<"create" | "list">("create");
@@ -26,26 +38,44 @@ export default function NewCampaign() {
   const [page, setPage] = useState(1);
   const [listData, setListData] = useState<CampaignListResponse | null>(null);
   const [listLoading, setListLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [listError, setListError] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const manualRefresh = useRef(false);
 
   useEffect(() => {
     if (activeTab !== "list") return;
     const controller = new AbortController();
+    const params = new URLSearchParams({ search, page: String(page) });
+    const cacheKey = `${CAMPAIGN_CACHE_PREFIX}${JSON.stringify([search, page])}`;
+    const bypassCache = manualRefresh.current;
+    manualRefresh.current = false;
+    if (!bypassCache) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          setListData(JSON.parse(cached) as CampaignListResponse);
+          setListError("");
+          setListLoading(false);
+          return () => controller.abort();
+        }
+      } catch { /* Ignore invalid or unavailable browser cache. */ }
+    }
     const timer = setTimeout(async () => {
       setListLoading(true);
       setListError("");
       try {
-        const params = new URLSearchParams({ search, page: String(page) });
         const response = await fetch(`/api/campaigns?${params}`, { signal: controller.signal, cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Không thể tải danh sách campaigns.");
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* Cache is optional. */ }
         setListData(data as CampaignListResponse);
       } catch (error) {
         if (!controller.signal.aborted) setListError(error instanceof Error ? error.message : "Không thể tải danh sách campaigns.");
       } finally {
         if (!controller.signal.aborted) setListLoading(false);
+        if (!controller.signal.aborted) setRefreshing(false);
       }
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -64,7 +94,7 @@ export default function NewCampaign() {
     try {
       const response = await fetch("/api/campaigns", { method: "POST", body: formData });
       const data = await response.json();
-      if (response.ok) { window.location.href = `/admin/campaigns/${data.id}`; return; }
+      if (response.ok) { clearCampaignCache(); window.location.href = `/admin/campaigns/${data.id}`; return; }
       setMsg(data.error || "Có lỗi xảy ra khi tạo campaign.");
     } catch {
       setMsg("Không thể kết nối máy chủ để tạo campaign.");
@@ -81,6 +111,7 @@ export default function NewCampaign() {
       const response = await fetch(`/api/campaigns/${campaign.id}`, { method: "DELETE" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Không thể xóa campaign.");
+      clearCampaignCache();
       if (listData?.campaigns.length === 1 && page > 1) setPage(page - 1);
       else setRefreshKey((current) => current + 1);
     } catch (error) {
@@ -88,6 +119,12 @@ export default function NewCampaign() {
     } finally {
       setDeletingId(null);
     }
+  }
+
+  function refreshCampaignList() {
+    manualRefresh.current = true;
+    setRefreshing(true);
+    setRefreshKey((current) => current + 1);
   }
 
   return <>
@@ -117,7 +154,7 @@ export default function NewCampaign() {
     </> : <section className="panel">
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
         <div><h2>Danh sách campaigns</h2><p className="sub">Tìm theo tên hoặc subject. Dữ liệu được tải trực tiếp từ Turso.</p></div>
-        <div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="campaign-search">Tìm kiếm</label><input id="campaign-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Nhập tên hoặc subject campaign…" /></div>
+        <div className="logs-toolbar-actions"><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="campaign-search">Tìm kiếm</label><input id="campaign-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Nhập tên hoặc subject campaign…" /></div><RefreshButton label="campaigns" refreshing={refreshing || listLoading} onClick={refreshCampaignList} /></div>
       </div>
       {listError && <div className="notice error">{listError}</div>}
       <div className="tablewrap"><table className="table">

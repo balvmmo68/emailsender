@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import ProviderLogsPanel from "@/components/ProviderLogsPanel";
+import RefreshButton from "@/components/RefreshButton";
 
 type ProviderConfig = { delaySeconds: number; dailyLimit: number; providerLimit: string };
 type KeyInfo = { provider: string; url: string; env: string; configured: boolean; missingVariables?: string[]; freeDaily: string; freeMonthly: string; config: ProviderConfig; usedToday: number; rotationThreshold: number };
@@ -15,20 +16,45 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [testing, setTesting] = useState("");
   const [sending, setSending] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"settings" | "logs">("settings");
 
-  useEffect(() => {
-    fetch("/api/settings").then(async (res) => {
-      if (!res.ok) throw new Error("Không thể tải cấu hình");
-      const data = await res.json(); setSettings(data.settings); setKeys(data.keys);
-    }).catch((err: Error) => setError(err.message));
-  }, []);
+  async function loadSettings(forceRefresh = false) {
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem("sender:settings");
+        if (cached) {
+          const data = JSON.parse(cached);
+          setSettings(data.settings);
+          setKeys(data.keys);
+          return;
+        }
+      } catch { /* Ignore invalid or unavailable browser cache. */ }
+    }
+    setRefreshing(true);
+    setError("");
+    try {
+      const response = await fetch("/api/settings", { cache: "no-store" });
+      if (!response.ok) throw new Error("Không thể tải cấu hình");
+      const data = await response.json();
+      setSettings(data.settings);
+      setKeys(data.keys);
+      try { sessionStorage.setItem("sender:settings", JSON.stringify(data)); } catch { /* Cache is optional. */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể tải cấu hình");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => { void loadSettings(); }, []);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setMessage(""); setError("");
     const res = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Không thể lưu cấu hình"); return; }
+    try { sessionStorage.setItem("sender:settings", JSON.stringify({ settings, keys })); } catch { /* Cache is optional. */ }
     setMessage("Đã lưu cấu hình riêng cho từng dịch vụ.");
   }
 
@@ -56,6 +82,7 @@ export default function SettingsPage() {
   return <>
     <div className="eyebrow">System settings</div><h1 className="title">Cấu hình gửi email theo dịch vụ</h1><p className="sub">Mỗi API provider có bộ cấu hình riêng, không dùng chung khoảng cách gửi hoặc hạn mức/ngày.</p>
     <div className="settings-tabs" role="tablist" aria-label="Settings navigation"><button className={`settings-tab ${activeTab === "settings" ? "active" : ""}`} type="button" role="tab" aria-selected={activeTab === "settings"} onClick={() => setActiveTab("settings")}>Cấu hình provider</button><button className={`settings-tab ${activeTab === "logs" ? "active" : ""}`} type="button" role="tab" aria-selected={activeTab === "logs"} onClick={() => setActiveTab("logs")}>Logs lỗi</button></div>
+    {activeTab === "settings" && <div className="toolbar"><span className="sub" style={{ margin: 0 }}>Dữ liệu được giữ trong phiên; nhấn refresh để lấy cấu hình mới nhất.</span><RefreshButton label="cấu hình Settings" refreshing={refreshing} onClick={() => void loadSettings(true)} /></div>}
     {activeTab === "logs" ? <ProviderLogsPanel /> : <>
       {message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}
       <form className="panel settings-panel" onSubmit={save}>

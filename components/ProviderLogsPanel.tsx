@@ -3,6 +3,16 @@
 import { useEffect, useState } from "react";
 
 type Log = { id: string; providerEnv: string; operation: string; recipient: string | null; errorMessage: string; createdAt: number };
+const LOG_CACHE_PREFIX = "sender:provider-logs:";
+
+function clearLogCache() {
+  try {
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(LOG_CACHE_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch { /* Session storage may be unavailable in restricted browsers. */ }
+}
 
 export default function ProviderLogsPanel() {
   const [logs, setLogs] = useState<Log[]>([]);
@@ -13,18 +23,30 @@ export default function ProviderLogsPanel() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  async function load(nextPage = page) {
-    const response = await fetch(`/api/logs?page=${nextPage}`);
+  async function load(nextPage = page, forceRefresh = false) {
+    const cacheKey = `${LOG_CACHE_PREFIX}${nextPage}`;
+    if (!forceRefresh) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const data = JSON.parse(cached);
+          setLogs(data.logs); setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
+          return;
+        }
+      } catch { /* Ignore invalid or unavailable browser cache. */ }
+    }
+    const response = await fetch(`/api/logs?page=${nextPage}`, { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) { setError(data.error || "Không thể tải logs"); return; }
     setLogs(data.logs); setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* Cache is optional. */ }
   }
 
   useEffect(() => { load(1); }, []);
 
   async function refreshLogs() {
     setRefreshing(true); setError("");
-    await load(page);
+    await load(page, true);
     setMessage("Đã cập nhật logs mới nhất.");
     setRefreshing(false);
   }
@@ -40,6 +62,7 @@ export default function ProviderLogsPanel() {
     const data = await response.json();
     if (!response.ok) { setError(data.error || "Không thể xóa log"); return; }
     setMessage(id ? "Đã xóa log." : "Đã xóa toàn bộ logs.");
+    clearLogCache();
     load(id && logs.length === 1 && page > 1 ? page - 1 : page);
   }
 

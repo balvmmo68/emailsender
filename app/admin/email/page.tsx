@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import RefreshButton from "@/components/RefreshButton";
 
 type EmailListSummary = { id: string; subject: string; createdAt: number; emailCount: number };
 type EmailContact = { id: string; email: string; name: string | null; createdAt: number };
@@ -8,6 +9,16 @@ type Paged<T> = { page: number; pageSize: number; total: number; totalPages: num
 type ListResponse = Paged<EmailListSummary> & { lists: EmailListSummary[] };
 type ContactResponse = Paged<EmailContact> & { list: { id: string; subject: string; createdAt: number }; contacts: EmailContact[] };
 const numberFormat = new Intl.NumberFormat("vi-VN");
+const EMAIL_CACHE_PREFIX = "sender:email-lists:";
+
+function clearEmailCache() {
+  try {
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(EMAIL_CACHE_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch { /* Session storage may be unavailable in restricted browsers. */ }
+}
 
 export default function EmailPage() {
   const [selectedList, setSelectedList] = useState<EmailListSummary | null>(null);
@@ -22,13 +33,31 @@ export default function EmailPage() {
   const [listsData, setListsData] = useState<ListResponse | null>(null);
   const [contactsData, setContactsData] = useState<ContactResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const manualRefresh = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
     const params = new URLSearchParams({ search, page: String(page) });
     if (selectedList) params.set("listId", selectedList.id);
+    const cacheKey = `${EMAIL_CACHE_PREFIX}${JSON.stringify([selectedList?.id || "lists", search, page])}`;
+    const bypassCache = manualRefresh.current;
+    manualRefresh.current = false;
+    if (!bypassCache) {
+      try {
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const result = JSON.parse(cached);
+          if (selectedList) setContactsData(result as ContactResponse);
+          else setListsData(result as ListResponse);
+          setError("");
+          setLoading(false);
+          return () => controller.abort();
+        }
+      } catch { /* Ignore invalid or unavailable browser cache and fetch from Turso. */ }
+    }
     const timer = setTimeout(async () => {
       setLoading(true);
       setError("");
@@ -36,12 +65,14 @@ export default function EmailPage() {
         const response = await fetch(`/api/email-lists?${params}`, { signal: controller.signal, cache: "no-store" });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Không thể tải dữ liệu email.");
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(result)); } catch { /* Cache is optional. */ }
         if (selectedList) setContactsData(result as ContactResponse);
         else setListsData(result as ListResponse);
       } catch (err) {
         if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Không thể tải dữ liệu email.");
       } finally {
         if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted) setRefreshing(false);
       }
     }, 200);
     return () => { clearTimeout(timer); controller.abort(); };
@@ -67,6 +98,7 @@ export default function EmailPage() {
       setSearch("");
       setPage(1);
       setSelectedList(null);
+      clearEmailCache();
       setRefreshKey((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể nhập file CSV.");
@@ -83,6 +115,12 @@ export default function EmailPage() {
     setContactsData(null);
   }
 
+  function refreshEmailData() {
+    manualRefresh.current = true;
+    setRefreshing(true);
+    setRefreshKey((current) => current + 1);
+  }
+
   async function deleteList(list: EmailListSummary) {
     if (!window.confirm(`Xóa chủ đề “${list.subject}” cùng ${numberFormat.format(list.emailCount)} email bên trong? Thao tác này không thể hoàn tác.`)) return;
     setDeletingId(list.id);
@@ -93,6 +131,7 @@ export default function EmailPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Không thể xóa chủ đề.");
       setNotice(`Đã xóa chủ đề “${list.subject}” và email bên trong.`);
+      clearEmailCache();
       if (listsData?.lists.length === 1 && page > 1) setPage((current) => current - 1);
       else setRefreshKey((current) => current + 1);
     } catch (err) {
@@ -112,6 +151,7 @@ export default function EmailPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Không thể xóa email.");
       setNotice(`Đã xóa ${contact.email}.`);
+      clearEmailCache();
       if (contactsData?.contacts.length === 1 && page > 1) setPage((current) => current - 1);
       else setRefreshKey((current) => current + 1);
     } catch (err) {
@@ -144,7 +184,7 @@ export default function EmailPage() {
       <section className="panel">
         <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
           <div><h2>Chủ đề danh sách</h2><p className="sub">Chọn một chủ đề để xem toàn bộ email trong danh sách.</p></div>
-          <div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="list-search">Tìm chủ đề</label><input id="list-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Nhập tên chủ đề…" /></div>
+          <div className="logs-toolbar-actions"><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="list-search">Tìm chủ đề</label><input id="list-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Nhập tên chủ đề…" /></div><RefreshButton label="chủ đề email" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
         </div>
         {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
         <div className="tablewrap"><table className="table email-list-summary">
@@ -165,7 +205,7 @@ export default function EmailPage() {
     </> : <section className="panel">
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
         <div><button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button><h2 style={{ marginTop: 16 }}>{selectedList.subject}</h2><p className="sub">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này.</p></div>
-        <div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div>
+        <div className="logs-toolbar-actions"><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div><RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
       </div>
       {notice && <div className="notice" style={{ marginBottom: 14 }}>{notice}</div>}
       {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
