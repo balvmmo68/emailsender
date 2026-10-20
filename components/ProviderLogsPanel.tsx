@@ -35,14 +35,22 @@ export default function ProviderLogsPanel() {
         }
       } catch { /* Ignore invalid or unavailable browser cache. */ }
     }
-    const response = await fetch(`/api/logs?page=${nextPage}`, { cache: "no-store" });
-    const data = await response.json();
-    if (!response.ok) { setError(data.error || "Không thể tải logs"); return; }
-    setLogs(data.logs); setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total);
-    try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* Cache is optional. */ }
+    try {
+      const response = await fetch(`/api/logs?page=${nextPage}`, { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) { setError(data.error || "Không thể tải logs"); return; }
+      setLogs(data.logs); setPage(data.page); setTotalPages(data.totalPages); setTotal(data.total); setError("");
+      try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch { /* Cache is optional. */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể tải logs");
+    }
   }
 
-  useEffect(() => { load(1); }, []);
+  useEffect(() => {
+    void load(page, true);
+    const timer = window.setInterval(() => { void load(page, true); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [page]);
 
   async function refreshLogs() {
     setRefreshing(true); setError("");
@@ -66,5 +74,5 @@ export default function ProviderLogsPanel() {
     load(id && logs.length === 1 && page > 1 ? page - 1 : page);
   }
 
-  return <section className="panel logs-panel"><div className="toolbar"><div><h2>Provider logs</h2><p className="sub">Lịch sử lỗi khi Test API và gửi email test theo từng provider.</p></div><div className="logs-toolbar-actions"><button className="button secondary refresh-button" type="button" onClick={refreshLogs} disabled={refreshing} aria-label="Làm mới logs" title="Làm mới logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14.7 4L20 15" /><path d="M20 20v-5h-5" /></svg>{refreshing ? "Đang tải…" : "Refresh"}</button><button className="button danger" type="button" disabled={!total} onClick={() => remove()}>Xóa toàn bộ logs</button></div></div>{message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}<div className="logs-summary"><h2>Logs lỗi ({total})</h2><span>Trang {page} / {totalPages}</span></div><div className="tablewrap"><table className="table logs-table"><thead><tr><th>Thời gian</th><th>Provider</th><th>Thao tác</th><th>Email nhận</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{logs.length ? logs.map((log) => <tr key={log.id}><td>{new Date(log.createdAt).toLocaleString("vi-VN")}</td><td><code>{log.providerEnv}</code></td><td>{log.operation}</td><td>{log.recipient || "—"}</td><td><span className="log-error">{log.errorMessage}</span></td><td><div className="log-actions"><button className="button secondary" type="button" onClick={() => copyError(log.errorMessage)}>Copy lỗi</button><button className="button danger" type="button" onClick={() => remove(log.id)}>Xóa</button></div></td></tr>) : <tr><td colSpan={6}>Chưa có log lỗi nào.</td></tr>}</tbody></table></div><div className="pagination"><span>Hiển thị tối đa 20 logs mỗi trang</span><div className="pagination-actions"><button className="button secondary" type="button" disabled={page <= 1} onClick={() => load(page - 1)}>← Trước</button><button className="button secondary" type="button" disabled={page >= totalPages} onClick={() => load(page + 1)}>Sau →</button></div></div></section>;
+  return <section className="panel logs-panel"><div className="toolbar"><div><h2>Provider logs</h2><p className="sub">Lỗi từ Test API, email test và gửi campaign; tự làm mới mỗi 5 giây.</p></div><div className="logs-toolbar-actions"><button className="button secondary refresh-button" type="button" onClick={refreshLogs} disabled={refreshing} aria-label="Làm mới logs" title="Làm mới logs"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4L4 9" /><path d="M4 4v5h5" /><path d="M4 13a8 8 0 0 0 14.7 4L20 15" /><path d="M20 20v-5h-5" /></svg>{refreshing ? "Đang tải…" : "Refresh"}</button><button className="button danger" type="button" disabled={!total} onClick={() => remove()}>Xóa toàn bộ logs</button></div></div>{message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}<div className="logs-summary"><h2>Logs lỗi ({total})</h2><span>Trang {page} / {totalPages}</span></div><div className="tablewrap"><table className="table logs-table"><thead><tr><th>Thời gian</th><th>Provider</th><th>Thao tác</th><th>Email nhận</th><th>Lỗi</th><th>Thao tác</th></tr></thead><tbody>{logs.length ? logs.map((log) => <tr key={log.id}><td>{new Date(log.createdAt).toLocaleString("vi-VN")}</td><td><code>{log.providerEnv}</code></td><td>{log.operation}</td><td>{log.recipient || "—"}</td><td><span className="log-error">{log.errorMessage}</span></td><td><div className="log-actions"><button className="button secondary" type="button" onClick={() => copyError(log.errorMessage)}>Copy lỗi</button><button className="button danger" type="button" onClick={() => remove(log.id)}>Xóa</button></div></td></tr>) : <tr><td colSpan={6}>Chưa có log lỗi nào.</td></tr>}</tbody></table></div><div className="pagination"><span>Hiển thị tối đa 20 logs mỗi trang</span><div className="pagination-actions"><button className="button secondary" type="button" disabled={page <= 1} onClick={() => load(page - 1)}>← Trước</button><button className="button secondary" type="button" disabled={page >= totalPages} onClick={() => load(page + 1)}>Sau →</button></div></div></section>;
 }

@@ -23,7 +23,7 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
     setError(data.error || "");
     if (!response.ok) throw new Error(data.error || "Không thể điều khiển gửi campaign");
     setStatus(data.status); setCursor(data.cursor || 0);
-    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; busyRecipient?: string; delayMs?: number; done?: boolean; providerSwitch?: { from: string | null; to: string; remainingMs: number; failureCount?: number }; providerFailure?: { provider: string; count: number; threshold: number; recipient: string } };
+    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; busyRecipient?: string; delayMs?: number; done?: boolean; providerSwitch?: { from: string | null; to: string; remainingMs: number; failureCount?: number; failureDetail?: string }; providerFailure?: { provider: string; count: number; threshold: number; recipient: string; detail?: string } };
   }
 
   async function processQueue() {
@@ -31,10 +31,10 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
     try {
       const data = await call("tick");
       if (data.providerSwitch) setMessage(data.providerSwitch.failureCount
-        ? `${providerLabels[data.providerSwitch.from || ""] || data.providerSwitch.from} lỗi ${data.providerSwitch.failureCount} recipient liên tiếp. Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây rồi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}; nhóm lỗi sẽ được thử lại trước.`
+        ? `${providerLabels[data.providerSwitch.from || ""] || data.providerSwitch.from} lỗi ${data.providerSwitch.failureCount} recipient liên tiếp. Lỗi gần nhất: ${data.providerSwitch.failureDetail || "không có chi tiết"}. Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây rồi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}; nhóm lỗi sẽ được thử lại trước.`
         : `Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây trước khi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}.`);
       else if (data.busyRecipient) setMessage(`Recipient ${data.busyRecipient} đang được xử lý ở một tab khác; sẽ kiểm tra lại tự động.`);
-      else if (data.providerFailure) setMessage(`${providerLabels[data.providerFailure.provider] || data.providerFailure.provider} bị từ chối recipient ${data.providerFailure.recipient} (${data.providerFailure.count}/${data.providerFailure.threshold}). Campaign tiếp tục với recipient kế tiếp.`);
+      else if (data.providerFailure) setMessage(`${providerLabels[data.providerFailure.provider] || data.providerFailure.provider} bị từ chối recipient ${data.providerFailure.recipient} (${data.providerFailure.count}/${data.providerFailure.threshold}). Lỗi: ${data.providerFailure.detail || "không có chi tiết"}. Campaign tiếp tục theo chính sách failover.`);
       else if (data.provider && data.recipient) setMessage(`Đã gửi ${data.recipient} qua ${providerLabels[data.provider] || data.provider}.`);
       if (data.status === "sending" && !data.done) timer.current = setTimeout(processQueue, Math.max(data.delayMs || 1000, 1000));
       else running.current = false;

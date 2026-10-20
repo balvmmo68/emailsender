@@ -7,6 +7,7 @@ import { client, db, ensureDatabase } from "@/db/client";
 import { campaigns, emailSettings, providerUsage, recipients } from "@/db/schema";
 import { isProviderConfigured, isProviderEnabled, sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
 import { hasProviderDailyCapacity, isDefinitiveProviderRejection, providerDailyAllowance, releaseRejectedProviderUsage, reserveProviderUsage } from "@/lib/provider-quota";
+import { recordProviderError } from "@/lib/provider-error-log";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
 const actionSchema = z.object({ action: z.enum(["start", "pause", "resume", "stop", "tick"]) });
@@ -307,7 +308,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
     const available = candidates.filter((env) => hasProviderDailyCapacity(usage[env] || 0, configs[env]?.dailyLimit || 100));
     if (!available.length) {
-      await releaseUnsentClaim(id, recipient.id, "Tất cả provider đã hết hạn mức cấu hình/ngày hoặc chưa cấu hình.");
+      const reason = "Tất cả provider đã hết hạn mức cấu hình/ngày, đang tắt hoặc chưa cấu hình.";
+      await recordProviderError(campaign.activeProviderEnv || "NO_PROVIDER", `campaign-blocked:${id}`, reason, recipient.email).catch((logError) => console.error("[campaign-send] Could not write blocked log:", logError));
+      await releaseUnsentClaim(id, recipient.id, reason);
       campaign = await getCampaign(id);
       return campaign ? responseFor(campaign, { blocked: true }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }
@@ -363,6 +366,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       let reserved = false;
       try { reserved = await reserveProviderUsage(env, usageDate, configs[env]?.dailyLimit || 100); }
       catch (error) {
+        await recordProviderError(env, `campaign-quota-check:${id}`, error, recipient.email).catch((logError) => console.error("[campaign-send] Could not write quota log:", logError));
         await releaseUnsentClaim(id, recipient.id, "Không đặt được quota provider; chưa gọi provider.");
         console.error("[campaign-send] Could not reserve provider quota:", error);
         return NextResponse.json({ error: "Không thể kiểm tra quota provider; chưa gửi email." }, { status: 503 });
@@ -375,7 +379,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const latest = await getCampaign(id);
           return latest ? responseFor(latest, { delayMs: PROVIDER_SWITCH_DELAY_MS, providerSwitch: { from: env, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
-        await releaseUnsentClaim(id, recipient.id, `${env} đã hết hạn mức cấu hình/ngày và không còn provider khác khả dụng.`);
+        const quotaError = `${env} đã hết hạn mức cấu hình/ngày và không còn provider khác khả dụng.`;
+        await recordProviderError(env, `campaign-quota:${id}`, quotaError, recipient.email).catch((logError) => console.error("[campaign-send] Could not write quota log:", logError));
+        await releaseUnsentClaim(id, recipient.id, quotaError);
         const latest = await getCampaign(id);
         return latest ? responseFor(latest) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
       }
@@ -387,11 +393,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         await releaseRejectedProviderUsage(env, usageDate, error).catch(() => undefined);
         if (!isDefinitiveProviderRejection(error)) {
           const reason = `${env}: kết quả giao thư chưa xác định; cần đối soát provider trước khi retry.`;
+          await recordProviderError(env, `campaign-send-uncertain:${id}`, error, recipient.email).catch((logError) => console.error("[campaign-send] Could not write uncertain-send log:", logError));
           await markUnknownClaim(id, recipient.id, reason);
           const latestCampaign = await getCampaign(id).catch(() => undefined);
           return latestCampaign ? responseFor(latestCampaign, { uncertainRecipient: recipient.email }) : NextResponse.json({ error: reason }, { status: 503 });
         }
         const errorDetail = error instanceof Error ? error.message : "gửi thất bại";
+        await recordProviderError(env, `campaign-send-rejected:${id}`, error, recipient.email).catch((logError) => console.error("[campaign-send] Could not write provider rejection log:", logError));
         const previousFailures = campaign.providerFailureEnv === env ? campaign.providerFailureCount : 0;
         const consecutiveFailures = previousFailures + 1;
         const failureStartCursor = previousFailures > 0 ? campaign.providerFailureStartCursor ?? cursorBeforeSend : cursorBeforeSend;
@@ -409,13 +417,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             const latest = await getCampaign(id);
             return latest ? responseFor(latest, {
               delayMs: PROVIDER_SWITCH_DELAY_MS,
-              providerSwitch: { from: env, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS, failureCount: consecutiveFailures },
+              providerSwitch: { from: env, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS, failureCount: consecutiveFailures, failureDetail: errorDetail },
             }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
           }
           await pauseForProviderFailureStreak(id, failureStartCursor, consecutiveFailures, env,
             `${PROVIDER_NAMES[env] || env} đã lỗi ${consecutiveFailures} email liên tiếp. Chưa có provider khác khả dụng; campaign đã tạm dừng và giữ các email để thử lại.`, cursorBeforeSend, previousFailures);
           const pausedCampaign = await getCampaign(id);
-          return pausedCampaign ? responseFor(pausedCampaign, { failedRecipient: recipient.email, providerFailureCount: consecutiveFailures }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+          return pausedCampaign ? responseFor(pausedCampaign, { failedRecipient: recipient.email, providerFailureCount: consecutiveFailures, providerFailure: { provider: env, count: consecutiveFailures, threshold: PROVIDER_FAILURE_THRESHOLD, recipient: recipient.email, detail: errorDetail } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
 
         try {
