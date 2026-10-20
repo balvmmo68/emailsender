@@ -100,6 +100,9 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .field { display: grid; gap: 7px; min-width: 0; }
 .field label { font-size: 12px; font-weight: 800; color: #42566c; }
+.campaign-html-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.campaign-html-heading .button { min-height: 36px; padding: 8px 13px; }
+.campaign-preview-message { margin: 10px 0 0; color: var(--teal); font-size: 13px; }
 .input, .textarea { width: 100%; min-width: 0; border: 1px solid #c9d5df; border-radius: 8px; padding: 11px 12px; font: inherit; background: #fff; }
 .input { min-height: 46px; }
 .textarea { min-height: 170px; resize: vertical; }
