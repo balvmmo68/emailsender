@@ -29,7 +29,7 @@ export function isDefinitiveProviderRejection(error: unknown) {
   if (!(error instanceof Error)) return false;
   const status = error.message.match(/\(HTTP (\d{3})\)/)?.[1];
   if (status) return new Set([400, 401, 403, 404, 405, 410, 413, 415, 422]).has(Number(status));
-  return error.message.startsWith("Thiếu ") || error.message.startsWith("EMAIL_FROM phải") || error.message.startsWith("Chưa có adapter");
+  return error.message.startsWith("Thiếu ") || error.message.startsWith("EMAIL_FROM phải") || error.message.startsWith("AGENTMAIL_CONFIG:") || error.message.startsWith("Chưa có adapter");
 }
 
 /** Release a slot only when the provider returned a definite client-side rejection. */

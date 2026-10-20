@@ -443,6 +443,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         messageId = await sendViaProvider(env, { to: recipient.email, subject: campaign.subject, html: campaign.htmlContent, text: campaign.textContent });
       } catch (error) {
         await releaseRejectedProviderUsage(env, usageDate, error).catch(() => undefined);
+        if (env === "AGENTMAIL_API_KEY" && error instanceof Error && error.message.startsWith("AGENTMAIL_PRE_SEND:")) {
+          const reason = error.message.replace(/^AGENTMAIL_PRE_SEND:\s*/, "");
+          await recordProviderError(env, `campaign-send-preflight:${id}`, reason, recipient.email).catch((logError) => console.error("[campaign-send] Could not write AgentMail preflight log:", logError));
+          await releaseUnsentClaim(id, recipient.id, `AgentMail chưa gửi email: ${reason}`);
+          const latestCampaign = await getCampaign(id).catch(() => undefined);
+          return latestCampaign ? responseFor(latestCampaign) : NextResponse.json({ error: reason }, { status: 503 });
+        }
         if (!isDefinitiveProviderRejection(error)) {
           const reason = `${env}: kết quả giao thư chưa xác định; cần đối soát provider trước khi retry.`;
           await recordProviderError(env, `campaign-send-uncertain:${id}`, error, recipient.email).catch((logError) => console.error("[campaign-send] Could not write uncertain-send log:", logError));

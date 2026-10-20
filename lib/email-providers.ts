@@ -46,11 +46,23 @@ export function isProviderEnabled(configs: Record<string, { enabled?: boolean }>
 
 async function resolveAgentMailInboxId(key: string) {
   const configuredInbox = process.env.AGENTMAIL_INBOX_ID?.trim();
-  if (configuredInbox) return configuredInbox;
-  const result = await readResponse(await fetch("https://api.agentmail.to/v0/inboxes?limit=1", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
-  const inboxId = result.inboxes?.[0]?.inbox_id || result.inboxes?.[0]?.email;
-  if (!inboxId) throw new Error("Chưa có inbox AgentMail. Tạo inbox trong AgentMail Console hoặc đặt AGENTMAIL_INBOX_ID trong Vercel.");
-  return inboxId as string;
+  const senderDomain = fromEmail().split("@").pop()?.toLowerCase();
+  if (configuredInbox) {
+    const inbox = await readResponse(await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(configuredInbox)}`, {
+      headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    }));
+    const inboxDomain = typeof inbox.email === "string" ? inbox.email.split("@").pop()?.toLowerCase() : undefined;
+    if (senderDomain && inboxDomain !== senderDomain) {
+      throw new Error(`AGENTMAIL_CONFIG: Inbox ${configuredInbox} không thuộc domain ${senderDomain}. Hãy đặt AGENTMAIL_INBOX_ID thành inbox đã tạo trên domain đã verify.`);
+    }
+    return configuredInbox;
+  }
+  const result = await readResponse(await fetch("https://api.agentmail.to/v0/inboxes?limit=100", { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } }));
+  const inbox = result.inboxes?.find((candidate: { email?: string }) => typeof candidate.email === "string" && candidate.email.split("@").pop()?.toLowerCase() === senderDomain);
+  if (!inbox?.inbox_id) {
+    throw new Error(`AGENTMAIL_CONFIG: Không tìm thấy inbox AgentMail trên domain ${senderDomain}. Hãy verify domain, tạo inbox trên domain đó, rồi đặt AGENTMAIL_INBOX_ID trong Vercel.`);
+  }
+  return inbox.inbox_id as string;
 }
 
 export async function sendViaProvider(env: string, message: ProviderMessage) {
@@ -84,7 +96,13 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
     return body.id as string | undefined;
   }
   if (env === "AGENTMAIL_API_KEY") {
-    const inboxId = await resolveAgentMailInboxId(key);
+    let inboxId: string;
+    try {
+      inboxId = await resolveAgentMailInboxId(key);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`AGENTMAIL_PRE_SEND: ${detail}`);
+    }
     const body = await readResponse(await fetch(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(inboxId)}/messages/send`, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ to: message.to, subject: message.subject, text: message.text, html: message.html }) }));
     return body.message_id || body.id;
   }

@@ -39,7 +39,9 @@ Hoặc paste SQL trong `drizzle/0000_init.sql` vào Turso SQL Console.
 
 ## 4. Resend
 
-Tạo API key, đặt `RESEND_API_KEY`. Với local có thể dùng `onboarding@resend.dev`; production nên verify domain và dùng `EMAIL_FROM` thuộc domain đã xác minh.
+Tạo API key, đặt `RESEND_API_KEY`. Với production, xác minh `sender.kryex.xyz` trong tài khoản provider và đặt `EMAIL_FROM` thành một địa chỉ trên domain đó, ví dụ `Sendroom <campaigns@sender.kryex.xyz>`. Không dùng địa chỉ thuộc `kryex.xyz` nếu chỉ xác minh `sender.kryex.xyz`; provider yêu cầu sender thuộc domain đã xác minh.
+
+Với AgentMail, xác minh domain, tạo inbox có địa chỉ trên `sender.kryex.xyz`, rồi đặt `AGENTMAIL_INBOX_ID` bằng inbox ID đó. Ứng dụng sẽ kiểm tra domain inbox khớp với `EMAIL_FROM` trước khi gửi; nếu không đặt ID, ứng dụng chỉ tự chọn một inbox trên đúng domain, không còn lấy inbox đầu tiên bất kỳ. AgentMail yêu cầu gói Developer trở lên để dùng custom domain.
 
 Để gửi danh sách email CSV từ `/admin/email`, đặt `EMAIL_LIST_EXPORT_TO` thành email nhận trong Vercel **Settings → Environment Variables**. Tính năng gửi bằng `RESEND_API_KEY` và địa chỉ `EMAIL_LIST_EXPORT_FROM` (nếu bỏ trống sẽ dùng `EMAIL_FROM`), kèm file CSV đính kèm. Domain của địa chỉ From phải được xác minh trong chính tài khoản Resend; sau khi thêm/sửa biến, tạo deployment mới.
 
