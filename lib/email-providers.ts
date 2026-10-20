@@ -4,11 +4,15 @@ function fromAddress() {
   return process.env.EMAIL_FROM || "onboarding@resend.dev";
 }
 
-function fromEmail() {
-  const value = fromAddress().trim();
-  const match = value.match(/<([^<>\s]+@[^<>\s]+)>/);
+function resendFromAddress() {
+  return process.env.RESEND_FROM || fromAddress();
+}
+
+function fromEmail(address = fromAddress(), variableName = "EMAIL_FROM") {
+  const value = address.trim();
+  const match = value.match(/<([^< >]+@[^< >]+)>/);
   const email = (match?.[1] || value).trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("EMAIL_FROM phải là email hợp lệ, ví dụ sender@your-domain.com");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error(`${variableName} phải là email hợp lệ, ví dụ sender@your-domain.com`);
   return email;
 }
 
@@ -69,11 +73,13 @@ export async function sendViaProvider(env: string, message: ProviderMessage) {
   const key = process.env[env];
   if (!key) throw new Error(`Thiếu ${env}`);
   const from = fromAddress();
-  const email = fromEmail();
   if (env === "RESEND_API_KEY") {
-    const body = await readResponse(await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from, to: [message.to], subject: message.subject, html: message.html, text: message.text }) }));
+    const resendFrom = resendFromAddress();
+    fromEmail(resendFrom, "RESEND_FROM");
+    const body = await readResponse(await fetch("https://api.resend.com/emails", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ from: resendFrom, to: [message.to], subject: message.subject, html: message.html, text: message.text }) }));
     return body.id as string | undefined;
   }
+  const email = fromEmail();
   if (env === "BREVO_API_KEY") {
     const body = await readResponse(await fetch("https://api.brevo.com/v3/smtp/email", { method: "POST", headers: { "api-key": key, "Content-Type": "application/json" }, body: JSON.stringify({ sender: { email }, to: [{ email: message.to }], subject: message.subject, htmlContent: message.html, textContent: message.text }) }));
     return body.messageId as string | undefined;

@@ -39,7 +39,7 @@ Hoặc paste SQL trong `drizzle/0000_init.sql` vào Turso SQL Console.
 
 ## 4. Resend
 
-Tạo API key, đặt `RESEND_API_KEY`. Với production, xác minh `sender.kryex.xyz` trong tài khoản provider và đặt `EMAIL_FROM` thành một địa chỉ trên domain đó, ví dụ `Sendroom <campaigns@sender.kryex.xyz>`. Không dùng địa chỉ thuộc `kryex.xyz` nếu chỉ xác minh `sender.kryex.xyz`; provider yêu cầu sender thuộc domain đã xác minh.
+Tạo API key, đặt `RESEND_API_KEY`. Địa chỉ gửi riêng cho Resend cấu hình bằng `RESEND_FROM`, ví dụ `Sendroom <campaigns@sender.kryex.xyz>`. Nếu bỏ trống, Resend dùng `EMAIL_FROM` làm giá trị dự phòng; các provider khác vẫn dùng `EMAIL_FROM`. Domain trong địa chỉ gửi phải được xác minh trong đúng tài khoản provider.
 
 Với AgentMail, xác minh domain, tạo inbox có địa chỉ trên `sender.kryex.xyz`, rồi đặt `AGENTMAIL_INBOX_ID` bằng inbox ID đó. Ứng dụng sẽ kiểm tra domain inbox khớp với `EMAIL_FROM` trước khi gửi; nếu không đặt ID, ứng dụng chỉ tự chọn một inbox trên đúng domain, không còn lấy inbox đầu tiên bất kỳ. AgentMail yêu cầu gói Developer trở lên để dùng custom domain.
 
