@@ -290,6 +290,13 @@ body:has(.public-site) { overflow: auto; background: #f7f8f5; }
 .footer-brand { gap: 7px; font-size: 14px; }.footer-brand .public-brand-mark { width: 24px; height: 24px; border-radius: 7px 7px 7px 2px; font-size: 13px; }
 .public-footer p { margin: 0; color: #9aa39d; font-size: 9px; text-align: center; }
 .public-footer > a:last-child { color: #6e7c74; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.public-legal { padding: 24px max(32px, calc((100% - 1180px) / 2)) 30px; border-top: 1px solid #e6eae5; background: #f0f3ef; color: #748078; }
+.public-legal h2 { margin: 0 0 13px; color: #53615a; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.legal-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 34px; }
+.legal-grid p { margin: 0; font-size: 9px; line-height: 1.7; }
+.legal-grid strong { color: #526259; }
+.legal-grid a { color: #176d58; font-weight: 750; text-decoration: underline; text-underline-offset: 2px; }
+.legal-updated { margin: 14px 0 0; color: #929c95; font-size: 8px; }
 @media (max-width: 850px) {
   .public-hero { min-height: auto; grid-template-columns: minmax(0, 1fr) minmax(300px, .8fr); gap: 35px; padding: 65px 0; }
   .hero-copy h1 { font-size: clamp(42px, 6.7vw, 58px); }
@@ -313,4 +320,6 @@ body:has(.public-site) { overflow: auto; background: #f7f8f5; }
   .value-item h3 { margin-top: 7px; }
   .public-footer { width: calc(100% - 36px); min-height: 105px; flex-wrap: wrap; justify-content: space-between; gap: 9px; padding: 17px 0; }
   .public-footer p { order: 3; flex: 0 0 100%; text-align: left; line-height: 1.5; }
+  .public-legal { padding: 22px 18px 26px; }
+  .legal-grid { grid-template-columns: 1fr; gap: 10px; }
 }

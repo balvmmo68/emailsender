@@ -78,5 +78,15 @@ export default function HomePage() {
     </section>
 
     <footer className="public-footer"><a className="public-brand footer-brand" href="/"><span className="public-brand-mark">S</span><span>sendroom<span className="brand-period">.</span></span></a><p>For informational purposes only. Not investment advice or a recommendation to trade.</p><a href="#signup">Subscribe ↑</a></footer>
+    <section className="public-legal" aria-labelledby="legal-title">
+      <h2 id="legal-title">Terms, disclaimer &amp; privacy</h2>
+      <div className="legal-grid">
+        <p><strong>Information only.</strong> The newsletter is provided for general informational and educational purposes. It is not financial, investment, trading, tax, or legal advice, nor a recommendation to buy or sell any asset. Always make your own decisions and consult a qualified professional where appropriate.</p>
+        <p><strong>No guarantees.</strong> Content may be based on sources believed to be reliable, but Sendroom makes no warranty as to its accuracy, completeness, timeliness, or availability and has no obligation to update previously published content. Markets involve risk; you are solely responsible for decisions made in reliance on information in the newsletter.</p>
+        <p><strong>Service terms.</strong> To the maximum extent permitted by applicable law, Sendroom disclaims liability for losses arising from use of, or reliance on, the newsletter. Sendroom may revise, suspend, or discontinue the newsletter or these terms at any time. Continued subscription after a change constitutes acceptance of the updated terms.</p>
+        <p><strong>Your subscription &amp; data.</strong> By subscribing, you agree to receive periodic email updates about crypto, forex, and finance. Your name and email are used to operate the newsletter, are not sold, and may be processed by service providers needed to deliver the service or when required by law. To request removal from the mailing list, email <a href="mailto:support@kryex.xyz">support@kryex.xyz</a>.</p>
+      </div>
+      <p className="legal-updated">These terms are provided for general information and do not replace legal advice. Last updated: October 2026.</p>
+    </section>
   </main>;
 }
