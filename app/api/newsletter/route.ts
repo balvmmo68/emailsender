@@ -5,9 +5,9 @@ import { client, ensureDatabase } from "@/db/client";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
 const signupSchema = z.object({
-  name: z.string().trim().min(1, "Vui lòng nhập tên.").max(120),
-  email: z.string().trim().email("Email chưa đúng định dạng.").max(254),
-  consent: z.literal(true, { errorMap: () => ({ message: "Vui lòng xác nhận đồng ý nhận bản tin." }) }),
+  name: z.string().trim().min(1, "Please enter your name.").max(120, "Name must be 120 characters or fewer."),
+  email: z.string().trim().email("Please enter a valid email address.").max(254),
+  consent: z.literal(true, { errorMap: () => ({ message: "Please confirm that you agree to receive the newsletter." }) }),
   website: z.string().max(200).optional(),
 });
 
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (originError) return originError;
   const parsed = signupSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message || "Thông tin đăng ký chưa hợp lệ." }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message || "Please check your signup details." }, { status: 400 });
   }
 
   // Honeypot: quietly acknowledge bot submissions without storing them.
@@ -32,6 +32,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[newsletter] Could not save signup:", error);
-    return NextResponse.json({ error: "Đăng ký chưa lưu được. Vui lòng thử lại sau." }, { status: 500 });
+    return NextResponse.json({ error: "We couldn't save your signup. Please try again later." }, { status: 500 });
   }
 }
