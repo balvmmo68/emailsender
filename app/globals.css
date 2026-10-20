@@ -207,8 +207,9 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
 .settings-tab.active { background: #fff; color: var(--teal); box-shadow: 0 2px 6px #102a4314; }
 .settings-test-recipient { width: min(420px, 100%); margin-bottom: 18px; }
 .settings-tablewrap { border: 1px solid #e8eef3; border-radius: 9px; }
-.settings-table { min-width: 760px; }
+.settings-table { min-width: 850px; }
 .settings-table th, .settings-table td { vertical-align: middle; padding: 8px 7px; }
+.settings-table th:nth-child(3), .settings-table td[data-label="Trạng thái API"] { min-width: 120px; text-align: center; }
 .settings-table { font-size: 13px; }
 .settings-table .input { min-width: 112px; }
 .settings-table .button { min-width: 96px; white-space: nowrap; }
