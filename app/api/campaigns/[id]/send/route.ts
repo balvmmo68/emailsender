@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { client, db, ensureDatabase } from "@/db/client";
 import { campaigns, emailSettings, providerUsage, recipients } from "@/db/schema";
-import { sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
+import { isProviderConfigured, sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
 import { hasProviderDailyCapacity, isDefinitiveProviderRejection, providerDailyAllowance, releaseRejectedProviderUsage, reserveProviderUsage } from "@/lib/provider-quota";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
@@ -13,6 +13,7 @@ const actionSchema = z.object({ action: z.enum(["start", "pause", "resume", "sto
 const runnableStates = ["draft", "paused", "stopped"] as const;
 const CLAIM_LEASE_MS = 120_000;
 const PROVIDER_SWITCH_DELAY_MS = 60_000;
+const PROVIDER_FAILURE_THRESHOLD = 4;
 const PROVIDER_NAMES: Record<string, string> = { RESEND_API_KEY: "Resend", BREVO_API_KEY: "Brevo", MAILJET_API_KEY: "Mailjet", MAILTRAP_API_TOKEN: "Mailtrap", MAILGUN_API_KEY: "Mailgun", POSTMARK_SERVER_TOKEN: "Postmark", MAILERSEND_API_TOKEN: "MailerSend", SMTP2GO_API_KEY: "SMTP2GO", MAILOFLY_API_KEY: "Mailofly", AGENTMAIL_API_KEY: "AgentMail" };
 
 function parseObject(value: string | null | undefined): Record<string, any> {
@@ -45,8 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
   const campaignSent = Object.fromEntries(sentRows.filter((item) => item.providerEnv).map((item) => [item.providerEnv as string, item.sentCount]));
   const providers = supportedProviderEnvs.flatMap((env) => {
-    const required = env === "MAILJET_API_KEY" ? [env, "MAILJET_SECRET_KEY"] : env === "MAILGUN_API_KEY" ? [env, "MAILGUN_DOMAIN"] : [env];
-    if (!required.every((key) => Boolean(process.env[key]))) return [];
+    if (!isProviderConfigured(env)) return [];
     const configuredLimit = Number(configs[env]?.dailyLimit || 100);
     const allowance = providerDailyAllowance(configuredLimit);
     const usedToday = usage[env] || 0;
@@ -57,9 +57,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     status: campaign.sendStatus,
     cursor: campaign.sendCursor,
     total: campaign.recipientCount,
-    currentProviderEnv: lastRecipient?.providerEnv || null,
+    currentProviderEnv: campaign.activeProviderEnv || lastRecipient?.providerEnv || null,
     pendingProviderEnv: campaign.pendingProviderEnv || null,
     providerSwitchAfter: campaign.providerSwitchAfter || null,
+    providerFailureEnv: campaign.providerFailureEnv || null,
+    providerFailureCount: campaign.providerFailureCount || 0,
     dailyLimit: providers.reduce((sum, provider) => sum + provider.dailyLimit, 0),
     dailyAllowance: providers.reduce((sum, provider) => sum + provider.allowance, 0),
     dailyUsed: providers.reduce((sum, provider) => sum + provider.usedToday, 0),
@@ -88,12 +90,63 @@ async function releaseUnsentClaim(campaignId: string, recipientId: string, reaso
   }
 }
 
-async function beginProviderSwitch(campaignId: string, recipientId: string, providerEnv: string, switchAfter: number) {
+async function beginProviderSwitch(campaignId: string, recipientId: string, providerEnv: string, switchAfter: number, retryRange?: { startCursor: number; count: number; fromProvider: string; expectedCursor: number; expectedFailureCount: number }, expectedCursor?: number) {
   await db.transaction(async (tx) => {
-    await tx.update(recipients).set({ status: "pending", sendClaimedAt: null })
-      .where(and(eq(recipients.id, recipientId), eq(recipients.status, "sending")));
-    await tx.update(campaigns).set({ pendingProviderEnv: providerEnv, providerSwitchAfter: switchAfter, sendError: null, updatedAt: Date.now() })
-      .where(and(eq(campaigns.id, campaignId), eq(campaigns.sendStatus, "sending")));
+    const currentCampaign = (await tx.select().from(campaigns).where(eq(campaigns.id, campaignId)).limit(1))[0];
+    if (!currentCampaign || currentCampaign.sendStatus !== "sending") throw new Error("Campaign no longer sending");
+    if (!retryRange && expectedCursor !== undefined && currentCampaign.sendCursor !== expectedCursor) throw new Error("Campaign cursor changed before provider switch.");
+    if (retryRange && (currentCampaign.sendCursor !== retryRange.expectedCursor || currentCampaign.providerFailureEnv !== retryRange.fromProvider || currentCampaign.providerFailureCount !== retryRange.expectedFailureCount)) {
+      throw new Error("Provider failure streak changed before retry switch.");
+    }
+    if (retryRange) {
+      const retryRecipients = await tx.select({ id: recipients.id }).from(recipients)
+        .where(eq(recipients.campaignId, campaignId)).orderBy(asc(recipients.createdAt), asc(recipients.id))
+        .limit(retryRange.count).offset(retryRange.startCursor);
+      if (retryRecipients.length !== retryRange.count) throw new Error("Không tìm thấy đầy đủ recipient trong chuỗi lỗi provider.");
+      const changed = await tx.update(recipients).set({ status: "pending", sendClaimedAt: null, providerEnv: retryRange.fromProvider })
+        .where(and(inArray(recipients.id, retryRecipients.map((recipient) => recipient.id)), inArray(recipients.status, ["failed", "sending", "pending"])));
+      if (changed.rowsAffected !== retryRange.count) throw new Error("Recipient retry group changed before provider switch.");
+    } else {
+      const released = await tx.update(recipients).set({ status: "pending", sendClaimedAt: null })
+        .where(and(eq(recipients.id, recipientId), eq(recipients.status, "sending")));
+      if (released.rowsAffected !== 1) throw new Error("Recipient claim changed before provider switch.");
+    }
+    const switched = await tx.update(campaigns).set({
+      ...(retryRange ? { sendCursor: retryRange.startCursor } : {}),
+      pendingProviderEnv: providerEnv,
+      providerSwitchAfter: switchAfter,
+      providerFailureEnv: null,
+      providerFailureCount: 0,
+      providerFailureStartCursor: null,
+      sendError: null,
+      updatedAt: Date.now(),
+    }).where(retryRange
+      ? and(eq(campaigns.id, campaignId), eq(campaigns.sendStatus, "sending"), eq(campaigns.sendCursor, retryRange.expectedCursor), eq(campaigns.providerFailureEnv, retryRange.fromProvider), eq(campaigns.providerFailureCount, retryRange.expectedFailureCount))
+      : and(eq(campaigns.id, campaignId), eq(campaigns.sendStatus, "sending"), eq(campaigns.sendCursor, expectedCursor ?? currentCampaign.sendCursor)));
+    if (switched.rowsAffected !== 1) throw new Error("Campaign changed before provider switch.");
+  });
+}
+
+async function pauseForProviderFailureStreak(campaignId: string, startCursor: number, failureCount: number, providerEnv: string, reason: string, expectedCursor: number, expectedStoredFailureCount: number) {
+  await db.transaction(async (tx) => {
+    const failedRecipients = await tx.select({ id: recipients.id }).from(recipients)
+      .where(eq(recipients.campaignId, campaignId)).orderBy(asc(recipients.createdAt), asc(recipients.id))
+      .limit(failureCount).offset(startCursor);
+    if (failedRecipients.length !== failureCount) throw new Error("Không tìm thấy đầy đủ recipient trong chuỗi lỗi provider.");
+    const changed = await tx.update(recipients).set({ status: "pending", sendClaimedAt: null, providerEnv })
+      .where(and(inArray(recipients.id, failedRecipients.map((recipient) => recipient.id)), inArray(recipients.status, ["failed", "sending", "pending"])));
+    if (changed.rowsAffected !== failureCount) throw new Error("Recipient failure group changed before pause.");
+    const paused = await tx.update(campaigns).set({
+      sendStatus: "paused",
+      sendCursor: startCursor,
+      activeProviderEnv: providerEnv,
+      providerFailureEnv: providerEnv,
+      providerFailureCount: failureCount,
+      providerFailureStartCursor: startCursor,
+      sendError: reason,
+      updatedAt: Date.now(),
+    }).where(and(eq(campaigns.id, campaignId), eq(campaigns.sendStatus, "sending"), eq(campaigns.sendCursor, expectedCursor), eq(campaigns.providerFailureEnv, providerEnv), eq(campaigns.providerFailureCount, expectedStoredFailureCount)));
+    if (paused.rowsAffected !== 1) throw new Error("Campaign changed before provider failure pause.");
   });
 }
 
@@ -178,7 +231,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const reason = await recoverStaleClaim(id, current);
           return NextResponse.json({ error: reason }, { status: 409 });
         }
-        return NextResponse.json({ error: `Email ${current.email} vẫn đang được xử lý. Hãy thử lại sau.` }, { status: 409 });
+        return responseFor(campaign, { delayMs: 3000, busyRecipient: current.email });
       }
       if (current?.status === "sent") {
         const nextCursor = campaign.sendCursor + 1;
@@ -206,7 +259,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (campaign.sendStatus !== "sending") return responseFor(campaign);
   const recipient = await recipientAtCursor(id, campaign.sendCursor);
   if (!recipient) {
-    await db.update(campaigns).set({ sendStatus: "completed", sendError: null, updatedAt: Date.now() })
+    await db.update(campaigns).set({ sendStatus: "completed", providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: Date.now() })
       .where(and(eq(campaigns.id, id), eq(campaigns.sendStatus, "sending")));
     campaign = await getCampaign(id);
     return campaign ? responseFor(campaign, { done: true }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -217,7 +270,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       campaign = await getCampaign(id);
       return NextResponse.json({ error: reason, status: campaign?.sendStatus }, { status: 409 });
     }
-    return NextResponse.json({ error: `Recipient ${recipient.email} đang được xử lý.` }, { status: 409 });
+    return responseFor(campaign, { delayMs: 3000, busyRecipient: recipient.email });
   }
   if (recipient.status !== "pending") return NextResponse.json({ error: `Recipient ${recipient.email} cần được đối soát trước khi gửi tiếp.` }, { status: 409 });
 
@@ -227,7 +280,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       AND EXISTS (SELECT 1 FROM campaigns WHERE id = ? AND send_status = 'sending')`,
     args: [claimedAt, recipient.id, id, id],
   });
-  if (claim.rowsAffected !== 1) return NextResponse.json({ error: `Recipient ${recipient.email} đang được xử lý hoặc campaign đã đổi trạng thái.` }, { status: 409 });
+  if (claim.rowsAffected !== 1) {
+    const latest = await getCampaign(id);
+    return latest ? responseFor(latest, { ...(latest.sendStatus === "sending" ? { delayMs: 1500, busyRecipient: recipient.email } : {}) }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  }
 
   try {
     campaign = await getCampaign(id);
@@ -240,7 +296,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const usageDate = new Date().toISOString().slice(0, 10);
     const usageRows = await db.select().from(providerUsage).where(eq(providerUsage.usageDate, usageDate));
     const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
-    const candidates = supportedProviderEnvs.filter((env) => process.env[env]).sort((a, b) => {
+    const candidates = supportedProviderEnvs.filter(isProviderConfigured).sort((a, b) => {
       const aLimit = Number(configs[a]?.dailyLimit || 100);
       const bLimit = Number(configs[b]?.dailyLimit || 100);
       return (usage[a] || 0) / aLimit - (usage[b] || 0) / bLimit;
@@ -252,14 +308,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return campaign ? responseFor(campaign, { blocked: true }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }
 
-    const failures: string[] = [];
     const cursorBeforeSend = campaign.sendCursor;
     const lastSentRecipient = cursorBeforeSend > 0 ? await recipientAtCursor(id, cursorBeforeSend - 1) : undefined;
-    let lastTriedProvider = lastSentRecipient?.providerEnv || null;
+    const lastTriedProvider = campaign.activeProviderEnv || lastSentRecipient?.providerEnv || null;
     const preferredProvider = campaign.pendingProviderEnv && available.includes(campaign.pendingProviderEnv as typeof available[number])
       ? campaign.pendingProviderEnv
+      : campaign.activeProviderEnv && available.includes(campaign.activeProviderEnv as typeof available[number]) ? campaign.activeProviderEnv
       : lastTriedProvider && available.includes(lastTriedProvider as typeof available[number]) ? lastTriedProvider : available[0];
-    const orderedAvailable = [preferredProvider, ...available.filter((env) => env !== preferredProvider)];
+    const orderedAvailable = [preferredProvider];
+    if (campaign.providerFailureCount >= PROVIDER_FAILURE_THRESHOLD && campaign.providerFailureEnv) {
+      const nextProvider = available.find((env) => env !== campaign.providerFailureEnv);
+      const failureStart = campaign.providerFailureStartCursor ?? Math.max(0, cursorBeforeSend - campaign.providerFailureCount);
+      if (!nextProvider) {
+        await pauseForProviderFailureStreak(id, failureStart, campaign.providerFailureCount, campaign.providerFailureEnv, `${campaign.providerFailureEnv} đã lỗi ${campaign.providerFailureCount} email liên tiếp; chưa có provider khác khả dụng. Đã tạm dừng và giữ các email để thử lại.`, cursorBeforeSend, campaign.providerFailureCount);
+        const pausedCampaign = await getCampaign(id);
+        return pausedCampaign ? responseFor(pausedCampaign) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      }
+      const switchAfter = Date.now() + PROVIDER_SWITCH_DELAY_MS;
+      await beginProviderSwitch(id, recipient.id, nextProvider, switchAfter, { startCursor: failureStart, count: campaign.providerFailureCount, fromProvider: campaign.providerFailureEnv, expectedCursor: cursorBeforeSend, expectedFailureCount: campaign.providerFailureCount });
+      const latest = await getCampaign(id);
+      return latest ? responseFor(latest, { delayMs: PROVIDER_SWITCH_DELAY_MS, providerSwitch: { from: campaign.providerFailureEnv, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS, failureCount: campaign.providerFailureCount } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
     for (const env of orderedAvailable) {
       let currentState;
       try { currentState = await getCampaign(id); }
@@ -276,12 +345,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const pendingSwitch = campaign.pendingProviderEnv === env ? campaign.providerSwitchAfter : null;
       if ((lastTriedProvider && env !== lastTriedProvider) || pendingSwitch) {
         if (pendingSwitch && pendingSwitch > Date.now()) {
-          await beginProviderSwitch(id, recipient.id, env, pendingSwitch);
+          await beginProviderSwitch(id, recipient.id, env, pendingSwitch, undefined, cursorBeforeSend);
           return responseFor(campaign, { delayMs: pendingSwitch - Date.now(), providerSwitch: { from: lastTriedProvider, to: env, remainingMs: pendingSwitch - Date.now() } });
         }
         if (!(pendingSwitch && pendingSwitch <= Date.now())) {
           const switchAfter = Date.now() + PROVIDER_SWITCH_DELAY_MS;
-          await beginProviderSwitch(id, recipient.id, env, switchAfter);
+          await beginProviderSwitch(id, recipient.id, env, switchAfter, undefined, cursorBeforeSend);
           const latest = await getCampaign(id);
           return latest ? responseFor(latest, { delayMs: PROVIDER_SWITCH_DELAY_MS, providerSwitch: { from: lastTriedProvider, to: env, remainingMs: PROVIDER_SWITCH_DELAY_MS } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
         }
@@ -294,7 +363,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         console.error("[campaign-send] Could not reserve provider quota:", error);
         return NextResponse.json({ error: "Không thể kiểm tra quota provider; chưa gửi email." }, { status: 503 });
       }
-      if (!reserved) { failures.push(`${env}: đã chạm ngưỡng gửi trong ngày`); continue; }
+      if (!reserved) {
+        const nextProvider = available.find((candidate) => candidate !== env);
+        if (nextProvider) {
+          const switchAfter = Date.now() + PROVIDER_SWITCH_DELAY_MS;
+          await beginProviderSwitch(id, recipient.id, nextProvider, switchAfter, undefined, cursorBeforeSend);
+          const latest = await getCampaign(id);
+          return latest ? responseFor(latest, { delayMs: PROVIDER_SWITCH_DELAY_MS, providerSwitch: { from: env, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+        }
+        await releaseUnsentClaim(id, recipient.id, `${env} đã hết hạn mức cấu hình/ngày và không còn provider khác khả dụng.`);
+        const latest = await getCampaign(id);
+        return latest ? responseFor(latest) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      }
 
       let messageId: string | undefined;
       try {
@@ -307,9 +387,60 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           const latestCampaign = await getCampaign(id).catch(() => undefined);
           return latestCampaign ? responseFor(latestCampaign, { uncertainRecipient: recipient.email }) : NextResponse.json({ error: reason }, { status: 503 });
         }
-        failures.push(`${env}: ${error instanceof Error ? error.message : "gửi thất bại"}`);
-        lastTriedProvider = env;
-        continue;
+        const errorDetail = error instanceof Error ? error.message : "gửi thất bại";
+        const previousFailures = campaign.providerFailureEnv === env ? campaign.providerFailureCount : 0;
+        const consecutiveFailures = previousFailures + 1;
+        const failureStartCursor = previousFailures > 0 ? campaign.providerFailureStartCursor ?? cursorBeforeSend : cursorBeforeSend;
+        if (consecutiveFailures >= PROVIDER_FAILURE_THRESHOLD) {
+          const nextProvider = available.find((candidate) => candidate !== env);
+          if (nextProvider) {
+            const switchAfter = Date.now() + PROVIDER_SWITCH_DELAY_MS;
+            await beginProviderSwitch(id, recipient.id, nextProvider, switchAfter, {
+              startCursor: failureStartCursor,
+              count: consecutiveFailures,
+              fromProvider: env,
+              expectedCursor: cursorBeforeSend,
+              expectedFailureCount: previousFailures,
+            });
+            const latest = await getCampaign(id);
+            return latest ? responseFor(latest, {
+              delayMs: PROVIDER_SWITCH_DELAY_MS,
+              providerSwitch: { from: env, to: nextProvider, remainingMs: PROVIDER_SWITCH_DELAY_MS, failureCount: consecutiveFailures },
+            }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+          }
+          await pauseForProviderFailureStreak(id, failureStartCursor, consecutiveFailures, env,
+            `${PROVIDER_NAMES[env] || env} đã lỗi ${consecutiveFailures} email liên tiếp. Chưa có provider khác khả dụng; campaign đã tạm dừng và giữ các email để thử lại.`, cursorBeforeSend, previousFailures);
+          const pausedCampaign = await getCampaign(id);
+          return pausedCampaign ? responseFor(pausedCampaign, { failedRecipient: recipient.email, providerFailureCount: consecutiveFailures }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+        }
+
+        try {
+          await db.transaction(async (tx) => {
+            const failedRecipient = await tx.update(recipients).set({ status: "failed", sendClaimedAt: null, providerEnv: env })
+              .where(and(eq(recipients.id, recipient.id), eq(recipients.status, "sending")));
+            if (failedRecipient.rowsAffected !== 1) throw new Error("RECIPIENT_STATE_CONFLICT");
+            const advanced = await tx.update(campaigns).set({
+              sendCursor: cursorBeforeSend + 1,
+              activeProviderEnv: env,
+              providerFailureEnv: env,
+              providerFailureCount: consecutiveFailures,
+              providerFailureStartCursor: failureStartCursor,
+              sendError: null,
+              updatedAt: Date.now(),
+            }).where(and(eq(campaigns.id, id), eq(campaigns.sendCursor, cursorBeforeSend), eq(campaigns.sendStatus, "sending")));
+            if (advanced.rowsAffected !== 1) throw new Error("CAMPAIGN_STATE_CONFLICT");
+          });
+        } catch (persistError) {
+          console.error("[campaign-send] Could not persist definite provider rejection:", persistError);
+          await markUnknownClaim(id, recipient.id, "Provider đã từ chối email nhưng không lưu được trạng thái; cần đối soát trước khi tiếp tục.");
+          const latest = await getCampaign(id).catch(() => undefined);
+          return latest ? responseFor(latest, { uncertainRecipient: recipient.email }) : NextResponse.json({ error: "Không lưu được lỗi provider." }, { status: 503 });
+        }
+        const latest = await getCampaign(id).catch(() => undefined);
+        return latest ? responseFor(latest, {
+          delayMs: Number(configs[env]?.delaySeconds || 10) * 1000,
+          providerFailure: { provider: env, count: consecutiveFailures, threshold: PROVIDER_FAILURE_THRESHOLD, recipient: recipient.email, detail: errorDetail },
+        }) : NextResponse.json({ error: "Campaign đã lưu lỗi provider nhưng không đọc lại được trạng thái." }, { status: 503 });
       }
 
       try {
@@ -318,7 +449,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             .where(and(eq(recipients.id, recipient.id), eq(recipients.status, "sending")));
           if (sentRecipient.rowsAffected !== 1) throw new Error("RECIPIENT_STATE_CONFLICT");
           const advanced = await tx.update(campaigns)
-            .set({ sendCursor: cursorBeforeSend + 1, pendingProviderEnv: null, providerSwitchAfter: null, sendError: null, updatedAt: Date.now() })
+            .set({ sendCursor: cursorBeforeSend + 1, pendingProviderEnv: null, providerSwitchAfter: null, activeProviderEnv: env, providerFailureEnv: null, providerFailureCount: 0, providerFailureStartCursor: null, sendError: null, updatedAt: Date.now() })
             .where(and(eq(campaigns.id, id), eq(campaigns.sendCursor, cursorBeforeSend), eq(campaigns.sendStatus, "sending")));
           if (advanced.rowsAffected !== 1) throw new Error("CAMPAIGN_STATE_CONFLICT");
         });
@@ -341,22 +472,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         : NextResponse.json({ error: "Email đã được gửi; không đọc lại được trạng thái campaign. Làm mới để xác nhận tiến độ." }, { status: 503 });
     }
 
-    try {
-      await db.transaction(async (tx) => {
-        await tx.update(recipients).set({ status: "failed", sendClaimedAt: null })
-          .where(and(eq(recipients.id, recipient.id), eq(recipients.status, "sending")));
-        await tx.update(campaigns).set({ sendStatus: "paused", sendError: failures.join("; "), updatedAt: Date.now() })
-          .where(and(eq(campaigns.id, id), eq(campaigns.sendStatus, "sending")));
-        await tx.update(campaigns).set({ sendError: failures.join("; "), updatedAt: Date.now() })
-          .where(and(eq(campaigns.id, id), inArray(campaigns.sendStatus, ["paused", "stopped"])));
-      });
-    } catch (error) {
-      console.error("[campaign-send] Could not persist definitive provider failures:", error);
-      await markUnknownClaim(id, recipient.id, "Provider trả lỗi nhưng không lưu được trạng thái recipient; cần đối soát trước khi tiếp tục.");
-      return NextResponse.json({ error: "Không lưu được kết quả provider; campaign cần đối soát trước khi tiếp tục." }, { status: 503 });
-    }
-    const failedCampaign = await getCampaign(id).catch(() => undefined);
-    return failedCampaign ? responseFor(failedCampaign, { failedRecipient: recipient.email }) : NextResponse.json({ error: "Campaign đã được cập nhật nhưng không đọc lại được trạng thái." }, { status: 503 });
+    await releaseUnsentClaim(id, recipient.id, "Không có provider khả dụng; chưa gọi API gửi email.");
+    const noProviderCampaign = await getCampaign(id).catch(() => undefined);
+    return noProviderCampaign ? responseFor(noProviderCampaign) : NextResponse.json({ error: "Không có provider khả dụng." }, { status: 503 });
   } catch (error) {
     // No provider request has been sent on this path; release the claim and pause safely.
     console.error("[campaign-send] Failed before provider submission:", error);

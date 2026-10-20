@@ -18,16 +18,23 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
   async function call(action: "start" | "pause" | "resume" | "stop" | "tick") {
     const response = await fetch(`/api/campaigns/${campaignId}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
     const data = await response.json();
+    if (data.status) setStatus(data.status);
+    if (typeof data.cursor === "number") setCursor(data.cursor);
+    setError(data.error || "");
     if (!response.ok) throw new Error(data.error || "Không thể điều khiển gửi campaign");
-    setStatus(data.status); setCursor(data.cursor || 0); setError(data.error || "");
-    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; delayMs?: number; done?: boolean; providerSwitch?: { from: string | null; to: string; remainingMs: number } };
+    setStatus(data.status); setCursor(data.cursor || 0);
+    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; busyRecipient?: string; delayMs?: number; done?: boolean; providerSwitch?: { from: string | null; to: string; remainingMs: number; failureCount?: number }; providerFailure?: { provider: string; count: number; threshold: number; recipient: string } };
   }
 
   async function processQueue() {
     if (!running.current) return;
     try {
       const data = await call("tick");
-      if (data.providerSwitch) setMessage(`Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây trước khi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}.`);
+      if (data.providerSwitch) setMessage(data.providerSwitch.failureCount
+        ? `${providerLabels[data.providerSwitch.from || ""] || data.providerSwitch.from} lỗi ${data.providerSwitch.failureCount} recipient liên tiếp. Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây rồi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}; nhóm lỗi sẽ được thử lại trước.`
+        : `Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây trước khi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}.`);
+      else if (data.busyRecipient) setMessage(`Recipient ${data.busyRecipient} đang được xử lý ở một tab khác; sẽ kiểm tra lại tự động.`);
+      else if (data.providerFailure) setMessage(`${providerLabels[data.providerFailure.provider] || data.providerFailure.provider} bị từ chối recipient ${data.providerFailure.recipient} (${data.providerFailure.count}/${data.providerFailure.threshold}). Campaign tiếp tục với recipient kế tiếp.`);
       else if (data.provider && data.recipient) setMessage(`Đã gửi ${data.recipient} qua ${providerLabels[data.provider] || data.provider}.`);
       if (data.status === "sending" && !data.done) timer.current = setTimeout(processQueue, Math.max(data.delayMs || 1000, 1000));
       else running.current = false;
@@ -39,7 +46,7 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
 
   async function start(action: "start" | "resume") {
     setError(""); setMessage(""); running.current = true;
-    try { await call(action); processQueue(); } catch (err) { running.current = false; setError(err instanceof Error ? err.message : "Không thể bắt đầu gửi"); }
+    try { const data = await call(action); if (data.delayMs) timer.current = setTimeout(processQueue, Math.max(data.delayMs, 1000)); else processQueue(); } catch (err) { running.current = false; setError(err instanceof Error ? err.message : "Không thể bắt đầu gửi"); }
   }
 
   async function pause() {
@@ -62,5 +69,5 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
   }, []);
 
   const percent = total ? Math.min(100, Math.round((cursor / total) * 100)) : 0;
-  return <section className="panel send-controls"><div className="send-controls-header"><div><h2>Gửi campaign</h2><p className="sub">Gửi tuần tự theo khoảng cách đã cấu hình, có thể tạm dừng và tiếp tục từ recipient hiện tại.</p></div><span className={`pill send-status-${status}`}>{status === "sending" ? "Đang gửi" : status === "paused" ? "Tạm dừng" : status === "stopped" ? "Đã dừng" : status === "completed" ? "Hoàn tất" : "Sẵn sàng"}</span></div><div className="send-progress"><div className="send-progress-bar" style={{ width: `${percent}%` }} /><span>{cursor} / {total} recipient ({percent}%)</span></div><div className="actions">{status === "sending" ? <button className="button secondary" type="button" onClick={pause}>Tạm dừng</button> : status === "paused" ? <button className="button" type="button" onClick={() => start("resume")}>Gửi tiếp</button> : status === "completed" ? null : <button className="button" type="button" onClick={() => start("start")}>Bắt đầu gửi</button>}{status !== "stopped" && status !== "completed" && <button className="button danger" type="button" onClick={stop}>Dừng</button>}</div>{message && <div className="notice" style={{ marginTop: 14 }}>{message}</div>}{error && <div className="notice error" style={{ marginTop: 14 }}>{error}</div>}</section>;
+  return <section className="panel send-controls"><div className="send-controls-header"><div><h2>Gửi campaign</h2><p className="sub">Gửi tuần tự theo khoảng cách đã cấu hình. Nếu provider từ chối 4 recipient liên tiếp, hệ thống chờ 60 giây, đổi provider và thử lại nhóm lỗi.</p></div><span className={`pill send-status-${status}`}>{status === "sending" ? "Đang gửi" : status === "paused" ? "Tạm dừng" : status === "stopped" ? "Đã dừng" : status === "completed" ? "Hoàn tất" : "Sẵn sàng"}</span></div><div className="send-progress"><div className="send-progress-bar" style={{ width: `${percent}%` }} /><span>{cursor} / {total} recipient ({percent}%)</span></div><div className="actions">{status === "sending" ? <button className="button secondary" type="button" onClick={pause}>Tạm dừng</button> : status === "paused" ? <button className="button" type="button" onClick={() => start("resume")}>Gửi tiếp</button> : status === "completed" ? null : <button className="button" type="button" onClick={() => start("start")}>Bắt đầu gửi</button>}{status !== "stopped" && status !== "completed" && <button className="button danger" type="button" onClick={stop}>Dừng</button>}</div>{message && <div className="notice" style={{ marginTop: 14 }}>{message}</div>}{error && <div className="notice error" style={{ marginTop: 14 }}>{error}</div>}</section>;
 }

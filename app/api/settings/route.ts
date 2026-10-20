@@ -7,6 +7,7 @@ import { emailSettings, providerUsage } from "@/db/schema";
 import { z } from "zod";
 import { rejectCrossOrigin } from "@/lib/request-security";
 import { providerDailyAllowance } from "@/lib/provider-quota";
+import { missingProviderEnvVariables } from "@/lib/email-providers";
 
 const keyDefinitions = [
   { provider: "Resend", url: "https://resend.com", env: "RESEND_API_KEY", freeDaily: "100", freeMonthly: "3.000" },
@@ -67,8 +68,7 @@ function getProviderConfigs(row?: { providerConfigsJson?: string | null; provide
 function getKeyMetadata(row: { providerConfigsJson?: string | null; providerLimitsJson?: string | null } | undefined, usage: Record<string, number>) {
   const configs = getProviderConfigs(row);
   return keyDefinitions.map((definition) => {
-    const requiredVariables = definition.env === "MAILJET_API_KEY" ? ["MAILJET_API_KEY", "MAILJET_SECRET_KEY"] : [definition.env];
-    const missingVariables = requiredVariables.filter((variable) => !process.env[variable]);
+    const missingVariables = missingProviderEnvVariables(definition.env);
     return {
       ...definition,
       configured: missingVariables.length === 0,

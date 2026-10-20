@@ -25,6 +25,10 @@ export function ensureDatabase() {
         send_error TEXT,
         pending_provider_env TEXT,
         provider_switch_after INTEGER,
+        active_provider_env TEXT,
+        provider_failure_env TEXT,
+        provider_failure_count INTEGER NOT NULL DEFAULT 0,
+        provider_failure_start_cursor INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )`);
@@ -39,10 +43,6 @@ export function ensureDatabase() {
         provider_env TEXT,
         created_at INTEGER NOT NULL
       )`);
-      const recipientColumns = await client.execute("PRAGMA table_info(recipients)");
-      if (!recipientColumns.rows.some((column) => String(column.name) === "send_claimed_at")) {
-        await client.execute("ALTER TABLE recipients ADD COLUMN send_claimed_at INTEGER");
-      }
       await client.execute("CREATE INDEX IF NOT EXISTS recipients_campaign_idx ON recipients(campaign_id)");
       await client.execute(`CREATE TABLE IF NOT EXISTS email_lists (
         id TEXT PRIMARY KEY NOT NULL,
@@ -60,15 +60,22 @@ export function ensureDatabase() {
       await client.execute("CREATE INDEX IF NOT EXISTS email_list_contacts_email_idx ON email_list_contacts(email)");
       await client.execute("CREATE UNIQUE INDEX IF NOT EXISTS email_list_contacts_newsletters_email_idx ON email_list_contacts(email) WHERE list_id = 'default-newsletters'");
       await client.execute({ sql: "INSERT OR IGNORE INTO email_lists (id, subject, created_at) VALUES ('default-newsletters', 'Newsletters', ?)", args: [Date.now()] });
-      for (const statement of [
-        "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'",
-        "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE campaigns ADD COLUMN send_error TEXT",
-        "ALTER TABLE campaigns ADD COLUMN pending_provider_env TEXT",
-        "ALTER TABLE campaigns ADD COLUMN provider_switch_after INTEGER",
-        "ALTER TABLE recipients ADD COLUMN provider_env TEXT",
-      ]) {
-        try { await client.execute(statement); } catch { /* Column already exists. */ }
+      const columnMigrations: Array<["campaigns" | "recipients", string, string]> = [
+        ["campaigns", "send_status", "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'"],
+        ["campaigns", "send_cursor", "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0"],
+        ["campaigns", "send_error", "ALTER TABLE campaigns ADD COLUMN send_error TEXT"],
+        ["campaigns", "pending_provider_env", "ALTER TABLE campaigns ADD COLUMN pending_provider_env TEXT"],
+        ["campaigns", "provider_switch_after", "ALTER TABLE campaigns ADD COLUMN provider_switch_after INTEGER"],
+        ["campaigns", "active_provider_env", "ALTER TABLE campaigns ADD COLUMN active_provider_env TEXT"],
+        ["campaigns", "provider_failure_env", "ALTER TABLE campaigns ADD COLUMN provider_failure_env TEXT"],
+        ["campaigns", "provider_failure_count", "ALTER TABLE campaigns ADD COLUMN provider_failure_count INTEGER NOT NULL DEFAULT 0"],
+        ["campaigns", "provider_failure_start_cursor", "ALTER TABLE campaigns ADD COLUMN provider_failure_start_cursor INTEGER"],
+        ["recipients", "send_claimed_at", "ALTER TABLE recipients ADD COLUMN send_claimed_at INTEGER"],
+        ["recipients", "provider_env", "ALTER TABLE recipients ADD COLUMN provider_env TEXT"],
+      ];
+      for (const [table, column, statement] of columnMigrations) {
+        const tableInfo = await client.execute(`PRAGMA table_info(${table})`);
+        if (!tableInfo.rows.some((row) => String(row.name) === column)) await client.execute(statement);
       }
       await client.execute(`CREATE TABLE IF NOT EXISTS email_settings (
         id INTEGER PRIMARY KEY NOT NULL,

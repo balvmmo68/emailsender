@@ -10,6 +10,8 @@ type ProviderStatus = {
   currentProviderEnv: string | null;
   pendingProviderEnv: string | null;
   providerSwitchAfter: number | null;
+  providerFailureEnv: string | null;
+  providerFailureCount: number;
   dailyLimit: number;
   dailyAllowance: number;
   dailyUsed: number;
@@ -61,6 +63,7 @@ export default function CampaignProviderStatus({ campaignId }: { campaignId: str
       {currentProvider && <span>{numberFormat.format(currentProvider.campaignSent)} email đã gửi trong campaign này · còn {numberFormat.format(currentProvider.remaining)} quota hôm nay</span>}
     </div>
     {pendingProvider && <div className="notice campaign-provider-switch" role="status">Đang nghỉ {numberFormat.format(secondsRemaining)} giây trước khi chuyển sang {pendingProvider.name}.</div>}
+    {data.providerFailureCount > 0 && <div className="notice campaign-provider-streak" role="status">{data.providerFailureCount >= 4 ? `${data.providers.find((provider) => provider.env === data.providerFailureEnv)?.name || data.providerFailureEnv} đã lỗi 4 recipient liên tiếp; campaign đang giữ các recipient để thử lại khi có provider khác khả dụng.` : `${data.providers.find((provider) => provider.env === data.providerFailureEnv)?.name || data.providerFailureEnv} đang có ${data.providerFailureCount}/4 recipient lỗi liên tiếp; nếu recipient tiếp theo cũng bị từ chối, hệ thống sẽ chờ 60 giây rồi đổi provider và thử lại nhóm lỗi.`}</div>}
     <div className="campaign-provider-grid">
       {data.providers.map((provider) => <div className={`campaign-provider-card ${provider.env === data.currentProviderEnv ? "is-current" : ""}`} key={provider.env}>
         <div className="campaign-provider-card-title"><b>{provider.name}</b>{provider.env === data.currentProviderEnv && <span className="pill">Đang chạy</span>}{provider.env === data.pendingProviderEnv && <span className="pill send-status-paused">Sắp chuyển</span>}</div>
