@@ -23,6 +23,8 @@ export function ensureDatabase() {
         send_status TEXT NOT NULL DEFAULT 'draft',
         send_cursor INTEGER NOT NULL DEFAULT 0,
         send_error TEXT,
+        pending_provider_env TEXT,
+        provider_switch_after INTEGER,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )`);
@@ -34,6 +36,7 @@ export function ensureDatabase() {
         variables_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL DEFAULT 'pending',
         send_claimed_at INTEGER,
+        provider_env TEXT,
         created_at INTEGER NOT NULL
       )`);
       const recipientColumns = await client.execute("PRAGMA table_info(recipients)");
@@ -61,6 +64,9 @@ export function ensureDatabase() {
         "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'",
         "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE campaigns ADD COLUMN send_error TEXT",
+        "ALTER TABLE campaigns ADD COLUMN pending_provider_env TEXT",
+        "ALTER TABLE campaigns ADD COLUMN provider_switch_after INTEGER",
+        "ALTER TABLE recipients ADD COLUMN provider_env TEXT",
       ]) {
         try { await client.execute(statement); } catch { /* Column already exists. */ }
       }

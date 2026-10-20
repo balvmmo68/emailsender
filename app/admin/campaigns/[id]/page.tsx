@@ -5,6 +5,7 @@ import { eq, desc, count } from "drizzle-orm";
 import TestEmailForm from "@/components/TestEmailForm";
 import EditCampaignForm from "@/components/EditCampaignForm";
 import CampaignSendControls from "@/components/CampaignSendControls";
+import CampaignProviderStatus from "@/components/CampaignProviderStatus";
 
 const PAGE_SIZE = 25;
 
@@ -21,10 +22,12 @@ export default async function CampaignPage({ params, searchParams }: { params: P
   const currentPage = Math.min(page, totalPages);
   const people = await db.select().from(recipients).where(eq(recipients.campaignId, id)).orderBy(desc(recipients.createdAt)).limit(PAGE_SIZE).offset((currentPage - 1) * PAGE_SIZE);
   return <>
+    <a className="button secondary campaign-back-link" href="/admin/campaigns/new?tab=list" aria-label="Quay lại danh sách campaigns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7" /></svg>Danh sách campaigns</a>
     <div className="eyebrow">Campaign detail</div>
     <h1 className="title">{campaign.name}</h1>
     <p className="sub">{campaign.subject}</p>
     <div className="metricrow"><div className="metric"><span className="eyebrow">Recipients</span><b>{campaign.recipientCount}</b></div><div className="metric"><span className="eyebrow">Created</span><b style={{ fontSize: 16 }}>{new Date(campaign.createdAt).toLocaleDateString("vi-VN")}</b></div><div className="metric"><span className="eyebrow">Status</span><b style={{ fontSize: 16 }}>{campaign.sendStatus === "sending" ? "Đang gửi" : campaign.sendStatus === "paused" ? "Tạm dừng" : campaign.sendStatus === "completed" ? "Hoàn tất" : campaign.sendStatus === "stopped" ? "Đã dừng" : "Sẵn sàng"}</b></div></div>
+    <CampaignProviderStatus campaignId={id} />
     <CampaignSendControls campaignId={id} initialStatus={campaign.sendStatus as "draft" | "sending" | "paused" | "stopped" | "completed"} initialCursor={campaign.sendCursor} total={campaign.recipientCount} />
     <EditCampaignForm campaign={campaign} />
     <section className="panel"><h2>Gửi email test</h2><p className="sub">MVP gửi test tới email bạn nhập, không ảnh hưởng hàng đợi campaign.</p><TestEmailForm campaignId={id} /></section>

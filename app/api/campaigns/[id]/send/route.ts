@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, count, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { client, db, ensureDatabase } from "@/db/client";
 import { campaigns, emailSettings, providerUsage, recipients } from "@/db/schema";
 import { sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
-import { hasProviderDailyCapacity, isDefinitiveProviderRejection, releaseRejectedProviderUsage, reserveProviderUsage } from "@/lib/provider-quota";
+import { hasProviderDailyCapacity, isDefinitiveProviderRejection, providerDailyAllowance, releaseRejectedProviderUsage, reserveProviderUsage } from "@/lib/provider-quota";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
 const actionSchema = z.object({ action: z.enum(["start", "pause", "resume", "stop", "tick"]) });
 const runnableStates = ["draft", "paused", "stopped"] as const;
 const CLAIM_LEASE_MS = 120_000;
+const PROVIDER_SWITCH_DELAY_MS = 60_000;
+const PROVIDER_NAMES: Record<string, string> = { RESEND_API_KEY: "Resend", BREVO_API_KEY: "Brevo", MAILJET_API_KEY: "Mailjet", MAILTRAP_API_TOKEN: "Mailtrap", MAILGUN_API_KEY: "Mailgun", POSTMARK_SERVER_TOKEN: "Postmark", MAILERSEND_API_TOKEN: "MailerSend", SMTP2GO_API_KEY: "SMTP2GO", MAILOFLY_API_KEY: "Mailofly", AGENTMAIL_API_KEY: "AgentMail" };
 
 function parseObject(value: string | null | undefined): Record<string, any> {
   try { const parsed = JSON.parse(value || "{}"); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; }
@@ -23,6 +25,47 @@ function responseFor(campaign: typeof campaigns.$inferSelect, extra: Record<stri
 
 async function getCampaign(id: string) {
   return (await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1))[0];
+}
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!isAdminEmail(session?.user?.email)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { id } = await params;
+  await ensureDatabase();
+  const campaign = await getCampaign(id);
+  if (!campaign) return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+  const settings = (await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
+  const configs = parseObject(settings?.providerConfigsJson);
+  const usageDate = new Date().toISOString().slice(0, 10);
+  const [usageRows, sentRows] = await Promise.all([
+    db.select().from(providerUsage).where(eq(providerUsage.usageDate, usageDate)),
+    db.select({ providerEnv: recipients.providerEnv, sentCount: count() }).from(recipients)
+      .where(and(eq(recipients.campaignId, id), eq(recipients.status, "sent"))).groupBy(recipients.providerEnv),
+  ]);
+  const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
+  const campaignSent = Object.fromEntries(sentRows.filter((item) => item.providerEnv).map((item) => [item.providerEnv as string, item.sentCount]));
+  const providers = supportedProviderEnvs.flatMap((env) => {
+    const required = env === "MAILJET_API_KEY" ? [env, "MAILJET_SECRET_KEY"] : env === "MAILGUN_API_KEY" ? [env, "MAILGUN_DOMAIN"] : [env];
+    if (!required.every((key) => Boolean(process.env[key]))) return [];
+    const configuredLimit = Number(configs[env]?.dailyLimit || 100);
+    const allowance = providerDailyAllowance(configuredLimit);
+    const usedToday = usage[env] || 0;
+    return [{ env, name: PROVIDER_NAMES[env] || env, dailyLimit: configuredLimit, allowance, usedToday, remaining: Math.max(0, allowance - usedToday), campaignSent: campaignSent[env] || 0 }];
+  });
+  const lastRecipient = campaign.sendCursor > 0 ? await recipientAtCursor(id, campaign.sendCursor - 1) : undefined;
+  return NextResponse.json({
+    status: campaign.sendStatus,
+    cursor: campaign.sendCursor,
+    total: campaign.recipientCount,
+    currentProviderEnv: lastRecipient?.providerEnv || null,
+    pendingProviderEnv: campaign.pendingProviderEnv || null,
+    providerSwitchAfter: campaign.providerSwitchAfter || null,
+    dailyLimit: providers.reduce((sum, provider) => sum + provider.dailyLimit, 0),
+    dailyAllowance: providers.reduce((sum, provider) => sum + provider.allowance, 0),
+    dailyUsed: providers.reduce((sum, provider) => sum + provider.usedToday, 0),
+    dailyRemaining: providers.reduce((sum, provider) => sum + provider.remaining, 0),
+    providers,
+  });
 }
 
 async function recipientAtCursor(campaignId: string, cursor: number) {
@@ -43,6 +86,15 @@ async function releaseUnsentClaim(campaignId: string, recipientId: string, reaso
   } catch (error) {
     console.error("[campaign-send] Could not release unsubmitted recipient claim:", error);
   }
+}
+
+async function beginProviderSwitch(campaignId: string, recipientId: string, providerEnv: string, switchAfter: number) {
+  await db.transaction(async (tx) => {
+    await tx.update(recipients).set({ status: "pending", sendClaimedAt: null })
+      .where(and(eq(recipients.id, recipientId), eq(recipients.status, "sending")));
+    await tx.update(campaigns).set({ pendingProviderEnv: providerEnv, providerSwitchAfter: switchAfter, sendError: null, updatedAt: Date.now() })
+      .where(and(eq(campaigns.id, campaignId), eq(campaigns.sendStatus, "sending")));
+  });
 }
 
 async function markUnknownClaim(campaignId: string, recipientId: string, reason: string) {
@@ -202,7 +254,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const failures: string[] = [];
     const cursorBeforeSend = campaign.sendCursor;
-    for (const env of available) {
+    const lastSentRecipient = cursorBeforeSend > 0 ? await recipientAtCursor(id, cursorBeforeSend - 1) : undefined;
+    let lastTriedProvider = lastSentRecipient?.providerEnv || null;
+    const preferredProvider = campaign.pendingProviderEnv && available.includes(campaign.pendingProviderEnv as typeof available[number])
+      ? campaign.pendingProviderEnv
+      : lastTriedProvider && available.includes(lastTriedProvider as typeof available[number]) ? lastTriedProvider : available[0];
+    const orderedAvailable = [preferredProvider, ...available.filter((env) => env !== preferredProvider)];
+    for (const env of orderedAvailable) {
       let currentState;
       try { currentState = await getCampaign(id); }
       catch (error) {
@@ -213,6 +271,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       if (!currentState || currentState.sendStatus !== "sending") {
         await releaseUnsentClaim(id, recipient.id, "Campaign được tạm dừng trước khi provider nhận email.");
         return currentState ? responseFor(currentState) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+      }
+
+      const pendingSwitch = campaign.pendingProviderEnv === env ? campaign.providerSwitchAfter : null;
+      if ((lastTriedProvider && env !== lastTriedProvider) || pendingSwitch) {
+        if (pendingSwitch && pendingSwitch > Date.now()) {
+          await beginProviderSwitch(id, recipient.id, env, pendingSwitch);
+          return responseFor(campaign, { delayMs: pendingSwitch - Date.now(), providerSwitch: { from: lastTriedProvider, to: env, remainingMs: pendingSwitch - Date.now() } });
+        }
+        if (!(pendingSwitch && pendingSwitch <= Date.now())) {
+          const switchAfter = Date.now() + PROVIDER_SWITCH_DELAY_MS;
+          await beginProviderSwitch(id, recipient.id, env, switchAfter);
+          const latest = await getCampaign(id);
+          return latest ? responseFor(latest, { delayMs: PROVIDER_SWITCH_DELAY_MS, providerSwitch: { from: lastTriedProvider, to: env, remainingMs: PROVIDER_SWITCH_DELAY_MS } }) : NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+        }
       }
 
       let reserved = false;
@@ -236,16 +308,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           return latestCampaign ? responseFor(latestCampaign, { uncertainRecipient: recipient.email }) : NextResponse.json({ error: reason }, { status: 503 });
         }
         failures.push(`${env}: ${error instanceof Error ? error.message : "gửi thất bại"}`);
+        lastTriedProvider = env;
         continue;
       }
 
       try {
         await db.transaction(async (tx) => {
-          const sentRecipient = await tx.update(recipients).set({ status: "sent", sendClaimedAt: null })
+          const sentRecipient = await tx.update(recipients).set({ status: "sent", sendClaimedAt: null, providerEnv: env })
             .where(and(eq(recipients.id, recipient.id), eq(recipients.status, "sending")));
           if (sentRecipient.rowsAffected !== 1) throw new Error("RECIPIENT_STATE_CONFLICT");
           const advanced = await tx.update(campaigns)
-            .set({ sendCursor: cursorBeforeSend + 1, sendError: null, updatedAt: Date.now() })
+            .set({ sendCursor: cursorBeforeSend + 1, pendingProviderEnv: null, providerSwitchAfter: null, sendError: null, updatedAt: Date.now() })
             .where(and(eq(campaigns.id, id), eq(campaigns.sendCursor, cursorBeforeSend), eq(campaigns.sendStatus, "sending")));
           if (advanced.rowsAffected !== 1) throw new Error("CAMPAIGN_STATE_CONFLICT");
         });

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type SendStatus = "draft" | "sending" | "paused" | "stopped" | "completed";
+const providerLabels: Record<string, string> = { RESEND_API_KEY: "Resend", BREVO_API_KEY: "Brevo", MAILJET_API_KEY: "Mailjet", MAILTRAP_API_TOKEN: "Mailtrap", MAILGUN_API_KEY: "Mailgun", POSTMARK_SERVER_TOKEN: "Postmark", MAILERSEND_API_TOKEN: "MailerSend", SMTP2GO_API_KEY: "SMTP2GO", MAILOFLY_API_KEY: "Mailofly", AGENTMAIL_API_KEY: "AgentMail" };
 
 export default function CampaignSendControls({ campaignId, initialStatus, initialCursor, total }: { campaignId: string; initialStatus: SendStatus; initialCursor: number; total: number }) {
   const [status, setStatus] = useState<SendStatus>(initialStatus);
@@ -19,14 +20,15 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Không thể điều khiển gửi campaign");
     setStatus(data.status); setCursor(data.cursor || 0); setError(data.error || "");
-    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; delayMs?: number; done?: boolean };
+    return data as { status: SendStatus; cursor: number; provider?: string; recipient?: string; delayMs?: number; done?: boolean; providerSwitch?: { from: string | null; to: string; remainingMs: number } };
   }
 
   async function processQueue() {
     if (!running.current) return;
     try {
       const data = await call("tick");
-      if (data.provider && data.recipient) setMessage(`Đã gửi ${data.recipient} qua ${data.provider}.`);
+      if (data.providerSwitch) setMessage(`Tạm nghỉ ${Math.ceil(data.providerSwitch.remainingMs / 1000)} giây trước khi chuyển sang ${providerLabels[data.providerSwitch.to] || data.providerSwitch.to}.`);
+      else if (data.provider && data.recipient) setMessage(`Đã gửi ${data.recipient} qua ${providerLabels[data.provider] || data.provider}.`);
       if (data.status === "sending" && !data.done) timer.current = setTimeout(processQueue, Math.max(data.delayMs || 1000, 1000));
       else running.current = false;
     } catch (err) {
@@ -51,6 +53,13 @@ export default function CampaignSendControls({ campaignId, initialStatus, initia
     if (timer.current) clearTimeout(timer.current);
     try { await call("stop"); setMessage("Đã dừng campaign."); } catch (err) { setError(err instanceof Error ? err.message : "Không thể dừng campaign"); }
   }
+
+  useEffect(() => {
+    if (initialStatus === "sending" && !running.current) {
+      running.current = true;
+      void processQueue();
+    }
+  }, []);
 
   const percent = total ? Math.min(100, Math.round((cursor / total) * 100)) : 0;
   return <section className="panel send-controls"><div className="send-controls-header"><div><h2>Gửi campaign</h2><p className="sub">Gửi tuần tự theo khoảng cách đã cấu hình, có thể tạm dừng và tiếp tục từ recipient hiện tại.</p></div><span className={`pill send-status-${status}`}>{status === "sending" ? "Đang gửi" : status === "paused" ? "Tạm dừng" : status === "stopped" ? "Đã dừng" : status === "completed" ? "Hoàn tất" : "Sẵn sàng"}</span></div><div className="send-progress"><div className="send-progress-bar" style={{ width: `${percent}%` }} /><span>{cursor} / {total} recipient ({percent}%)</span></div><div className="actions">{status === "sending" ? <button className="button secondary" type="button" onClick={pause}>Tạm dừng</button> : status === "paused" ? <button className="button" type="button" onClick={() => start("resume")}>Gửi tiếp</button> : status === "completed" ? null : <button className="button" type="button" onClick={() => start("start")}>Bắt đầu gửi</button>}{status !== "stopped" && status !== "completed" && <button className="button danger" type="button" onClick={stop}>Dừng</button>}</div>{message && <div className="notice" style={{ marginTop: 14 }}>{message}</div>}{error && <div className="notice error" style={{ marginTop: 14 }}>{error}</div>}</section>;

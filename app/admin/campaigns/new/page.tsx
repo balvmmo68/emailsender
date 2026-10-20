@@ -79,6 +79,10 @@ export default function NewCampaign() {
   const manualRefresh = useRef(false);
 
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("tab") === "list") setActiveTab("list");
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
     fetch("/api/email-lists?forSelect=1", { signal: controller.signal, cache: "no-store" })
       .then(async (response) => {

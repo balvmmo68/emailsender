@@ -10,6 +10,8 @@ export const campaigns = sqliteTable("campaigns", {
   sendStatus: text("send_status").notNull().default("draft"),
   sendCursor: integer("send_cursor").notNull().default(0),
   sendError: text("send_error"),
+  pendingProviderEnv: text("pending_provider_env"),
+  providerSwitchAfter: integer("provider_switch_after"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -22,6 +24,7 @@ export const recipients = sqliteTable("recipients", {
   variablesJson: text("variables_json").notNull().default("{}"),
   status: text("status").notNull().default("pending"),
   sendClaimedAt: integer("send_claimed_at"),
+  providerEnv: text("provider_env"),
   createdAt: integer("created_at").notNull(),
 });
 
