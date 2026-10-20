@@ -24,6 +24,20 @@ export const recipients = sqliteTable("recipients", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const emailLists = sqliteTable("email_lists", {
+  id: text("id").primaryKey(),
+  subject: text("subject").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const emailListContacts = sqliteTable("email_list_contacts", {
+  id: text("id").primaryKey(),
+  listId: text("list_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name"),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const emailSettings = sqliteTable("email_settings", {
   id: integer("id").primaryKey(),
   delaySeconds: integer("delay_seconds").notNull().default(10),

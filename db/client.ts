@@ -36,6 +36,20 @@ export function ensureDatabase() {
         created_at INTEGER NOT NULL
       )`);
       await client.execute("CREATE INDEX IF NOT EXISTS recipients_campaign_idx ON recipients(campaign_id)");
+      await client.execute(`CREATE TABLE IF NOT EXISTS email_lists (
+        id TEXT PRIMARY KEY NOT NULL,
+        subject TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`);
+      await client.execute(`CREATE TABLE IF NOT EXISTS email_list_contacts (
+        id TEXT PRIMARY KEY NOT NULL,
+        list_id TEXT NOT NULL,
+        email TEXT NOT NULL,
+        name TEXT,
+        created_at INTEGER NOT NULL
+      )`);
+      await client.execute("CREATE INDEX IF NOT EXISTS email_list_contacts_list_idx ON email_list_contacts(list_id)");
+      await client.execute("CREATE INDEX IF NOT EXISTS email_list_contacts_email_idx ON email_list_contacts(email)");
       for (const statement of [
         "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'",
         "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0",
