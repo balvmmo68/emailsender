@@ -39,6 +39,7 @@ export default function EmailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [sendingCsv, setSendingCsv] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const manualRefresh = useRef(false);
 
@@ -177,6 +178,26 @@ export default function EmailPage() {
     setRefreshKey((current) => current + 1);
   }
 
+  async function sendListCsv() {
+    if (!selectedList) return;
+    const count = contactsData?.total ?? selectedList.emailCount;
+    if (!count) { setError("Danh sách hiện không có email để gửi."); return; }
+    if (!window.confirm(`Gửi file CSV gồm ${numberFormat.format(count)} email trong “${selectedList.subject}” tới địa chỉ được cấu hình bằng EMAIL_LIST_EXPORT_TO trên Vercel?`)) return;
+    setSendingCsv(true);
+    setNotice("");
+    setError("");
+    try {
+      const response = await fetch(`/api/email-lists/${encodeURIComponent(selectedList.id)}/send-csv`, { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể gửi file CSV.");
+      setNotice(`Đã gửi CSV của “${selectedList.subject}” (${numberFormat.format(result.sentCount)} email). Message ID: ${result.id || "ok"}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể gửi file CSV.");
+    } finally {
+      setSendingCsv(false);
+    }
+  }
+
   async function deleteList(list: EmailListSummary) {
     if (!window.confirm(`Xóa chủ đề “${list.subject}” cùng ${numberFormat.format(list.emailCount)} email bên trong? Thao tác này không thể hoàn tác.`)) return;
     setDeletingId(list.id);
@@ -261,7 +282,7 @@ export default function EmailPage() {
     </> : <section className="panel">
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
         <div><button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button><h2 style={{ marginTop: 16 }}>{selectedList.subject}</h2><p className="sub">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này.</p></div>
-        <div className="logs-toolbar-actions"><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div><RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
+        <div className="logs-toolbar-actions"><button className="button" type="button" disabled={sendingCsv || loading || !(contactsData?.total ?? selectedList.emailCount)} onClick={sendListCsv}>{sendingCsv ? "Đang gửi CSV…" : "Gửi CSV qua email"}</button><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div><RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
         </div>
       <div className="panel" style={{ margin: "16px 0", background: "var(--surface, #fff)" }}>
         <h3>Cập nhật danh sách từ CSV</h3>
