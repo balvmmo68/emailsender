@@ -83,6 +83,25 @@ export default function EmailPage() {
     setContactsData(null);
   }
 
+  async function deleteList(list: EmailListSummary) {
+    if (!window.confirm(`Xóa chủ đề “${list.subject}” cùng ${numberFormat.format(list.emailCount)} email bên trong? Thao tác này không thể hoàn tác.`)) return;
+    setDeletingId(list.id);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(`/api/email-lists/${list.id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể xóa chủ đề.");
+      setNotice(`Đã xóa chủ đề “${list.subject}” và email bên trong.`);
+      if (listsData?.lists.length === 1 && page > 1) setPage((current) => current - 1);
+      else setRefreshKey((current) => current + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể xóa chủ đề.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   async function deleteEmail(contact: EmailContact) {
     if (!window.confirm(`Xóa địa chỉ ${contact.email} khỏi chủ đề “${selectedList?.subject || ""}”?`)) return;
     setDeletingId(contact.id);
@@ -129,12 +148,13 @@ export default function EmailPage() {
         </div>
         {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
         <div className="tablewrap"><table className="table email-list-summary">
-          <thead><tr><th>Chủ đề danh sách</th><th>Tổng email</th></tr></thead>
+          <thead><tr><th>Chủ đề danh sách</th><th>Tổng email</th><th>Thao tác</th></tr></thead>
           <tbody>
-            {loading ? <tr><td colSpan={2}>Đang tải danh sách từ Turso…</td></tr> : listsData?.lists.length ? listsData.lists.map((list) => <tr key={list.id}>
+            {loading ? <tr><td colSpan={3}>Đang tải danh sách từ Turso…</td></tr> : listsData?.lists.length ? listsData.lists.map((list) => <tr key={list.id}>
               <td><button className="email-topic-link" type="button" onClick={() => openList(list)}>{list.subject}</button></td>
               <td><span className="pill">{numberFormat.format(list.emailCount)}</span></td>
-            </tr>) : <tr><td colSpan={2}>{search ? "Không tìm thấy chủ đề phù hợp." : "Chưa có chủ đề danh sách nào."}</td></tr>}
+              <td><button className="button danger" type="button" disabled={deletingId === list.id} onClick={() => deleteList(list)}>{deletingId === list.id ? "Đang xóa…" : "Xóa chủ đề"}</button></td>
+            </tr>) : <tr><td colSpan={3}>{search ? "Không tìm thấy chủ đề phù hợp." : "Chưa có chủ đề danh sách nào."}</td></tr>}
           </tbody>
         </table></div>
         {listsData && <div className="pagination"><span>{numberFormat.format(listsData.total)} chủ đề · Trang {listsData.page} / {listsData.totalPages}</span><div className="pagination-actions">
