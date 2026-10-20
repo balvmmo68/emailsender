@@ -5,6 +5,7 @@ import RefreshButton from "@/components/RefreshButton";
 
 type EmailListSummary = { id: string; subject: string; createdAt: number; emailCount: number };
 type EmailContact = { id: string; email: string; name: string | null; createdAt: number };
+type ReplacePreview = { list: { id: string; subject: string }; validCount: number; invalidCount: number; duplicateCount: number; totalRows: number; invalidSamples: Array<{ row: number; email: string }> };
 type Paged<T> = { page: number; pageSize: number; total: number; totalPages: number };
 type ListResponse = Paged<EmailListSummary> & { lists: EmailListSummary[] };
 type ContactResponse = Paged<EmailContact> & { list: { id: string; subject: string; createdAt: number }; contacts: EmailContact[] };
@@ -25,6 +26,9 @@ export default function EmailPage() {
   const [subject, setSubject] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fileKey, setFileKey] = useState(0);
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceFileKey, setReplaceFileKey] = useState(0);
+  const [replacePreview, setReplacePreview] = useState<ReplacePreview | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -102,6 +106,58 @@ export default function EmailPage() {
       setRefreshKey((current) => current + 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể nhập file CSV.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function previewReplacement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedList || !replaceFile) { setError("Vui lòng chọn file CSV để cập nhật."); return; }
+    setSaving(true);
+    setNotice("");
+    setError("");
+    setReplacePreview(null);
+    const form = new FormData();
+    form.set("action", "preview");
+    form.set("listId", selectedList.id);
+    form.set("file", replaceFile);
+    try {
+      const response = await fetch("/api/email-lists", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể kiểm tra file CSV.");
+      setReplacePreview(result as ReplacePreview);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể kiểm tra file CSV.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmReplacement() {
+    if (!selectedList || !replaceFile || !replacePreview) return;
+    const oldCount = contactsData?.total ?? selectedList.emailCount;
+    if (!window.confirm(`Thay toàn bộ ${numberFormat.format(oldCount)} email trong “${selectedList.subject}” bằng ${numberFormat.format(replacePreview.validCount)} email hợp lệ từ CSV? ${numberFormat.format(replacePreview.invalidCount)} dòng lỗi và ${numberFormat.format(replacePreview.duplicateCount)} dòng trùng sẽ bị bỏ qua. Thao tác thay thế không thể hoàn tác.`)) return;
+    setSaving(true);
+    setNotice("");
+    setError("");
+    const form = new FormData();
+    form.set("action", "replace");
+    form.set("listId", selectedList.id);
+    form.set("file", replaceFile);
+    try {
+      const response = await fetch("/api/email-lists", { method: "POST", body: form });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể cập nhật danh sách.");
+      setNotice(`Đã cập nhật “${selectedList.subject}”: ${numberFormat.format(result.imported)} email hợp lệ; bỏ qua ${numberFormat.format(result.removedInvalid)} dòng lỗi và ${numberFormat.format(result.removedDuplicates)} dòng trùng.`);
+      setReplaceFile(null);
+      setReplaceFileKey((current) => current + 1);
+      setReplacePreview(null);
+      clearEmailCache();
+      setPage(1);
+      setRefreshKey((current) => current + 1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể cập nhật danh sách.");
     } finally {
       setSaving(false);
     }
@@ -206,6 +262,20 @@ export default function EmailPage() {
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
         <div><button className="button secondary" type="button" onClick={() => { setSelectedList(null); setSearch(""); setPage(1); setNotice(""); }}>← Tất cả chủ đề</button><h2 style={{ marginTop: 16 }}>{selectedList.subject}</h2><p className="sub">{numberFormat.format(contactsData?.total ?? selectedList.emailCount)} email trong danh sách này.</p></div>
         <div className="logs-toolbar-actions"><div className="field" style={{ width: "min(100%, 360px)" }}><label htmlFor="contact-search">Tìm email trong chủ đề</label><input id="contact-search" className="input" type="search" value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Email hoặc tên…" /></div><RefreshButton label="email trong chủ đề" refreshing={refreshing || loading} onClick={refreshEmailData} /></div>
+        </div>
+      <div className="panel" style={{ margin: "16px 0", background: "var(--surface, #fff)" }}>
+        <h3>Cập nhật danh sách từ CSV</h3>
+        <p className="sub">Xem trước số email hợp lệ và lỗi trước khi xác nhận. Khi xác nhận, danh sách hiện tại sẽ được thay bằng email hợp lệ trong file; email lỗi và trùng lặp sẽ bị bỏ qua.</p>
+        <form onSubmit={previewReplacement}>
+          <div className="field"><label htmlFor="replace-email-csv">File CSV mới</label><input key={replaceFileKey} id="replace-email-csv" className="input" type="file" accept=".csv,text/csv" required onChange={(event) => { setReplaceFile(event.target.files?.[0] || null); setReplacePreview(null); }} /><span className="sub" style={{ margin: 0 }}>Tối đa 5MB, tối đa 10.000 email hợp lệ.</span></div>
+          <div className="actions"><button className="button secondary" type="submit" disabled={saving || !replaceFile}>{saving ? "Đang kiểm tra…" : "Xem trước cập nhật"}</button></div>
+        </form>
+        {replacePreview && <div className="notice" style={{ marginTop: 14 }}>
+          <strong>Xem trước “{replacePreview.list.subject}”</strong>
+          <p style={{ margin: "8px 0" }}>Hợp lệ: {numberFormat.format(replacePreview.validCount)} · Lỗi: {numberFormat.format(replacePreview.invalidCount)} · Trùng lặp: {numberFormat.format(replacePreview.duplicateCount)}</p>
+          {replacePreview.invalidSamples.length > 0 && <details><summary>Ví dụ dòng lỗi (tối đa 20)</summary><ul>{replacePreview.invalidSamples.map((item, index) => <li key={`${item.row}-${index}`}>Dòng {item.row}: {item.email || "Email trống"}</li>)}</ul></details>}
+          <div className="actions"><button className="button danger" type="button" disabled={saving} onClick={confirmReplacement}>{saving ? "Đang cập nhật…" : `Xác nhận thay bằng ${numberFormat.format(replacePreview.validCount)} email`}</button><button className="button secondary" type="button" disabled={saving} onClick={() => { setReplacePreview(null); setReplaceFile(null); setReplaceFileKey((current) => current + 1); }}>Hủy</button></div>
+        </div>}
       </div>
       {notice && <div className="notice" style={{ marginBottom: 14 }}>{notice}</div>}
       {error && <div className="notice error" style={{ marginBottom: 14 }}>{error}</div>}
