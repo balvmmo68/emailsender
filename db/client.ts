@@ -55,6 +55,8 @@ export function ensureDatabase() {
       )`);
       await client.execute("CREATE INDEX IF NOT EXISTS email_list_contacts_list_idx ON email_list_contacts(list_id)");
       await client.execute("CREATE INDEX IF NOT EXISTS email_list_contacts_email_idx ON email_list_contacts(email)");
+      await client.execute("CREATE UNIQUE INDEX IF NOT EXISTS email_list_contacts_newsletters_email_idx ON email_list_contacts(email) WHERE list_id = 'default-newsletters'");
+      await client.execute({ sql: "INSERT OR IGNORE INTO email_lists (id, subject, created_at) VALUES ('default-newsletters', 'Newsletters', ?)", args: [Date.now()] });
       for (const statement of [
         "ALTER TABLE campaigns ADD COLUMN send_status TEXT NOT NULL DEFAULT 'draft'",
         "ALTER TABLE campaigns ADD COLUMN send_cursor INTEGER NOT NULL DEFAULT 0",

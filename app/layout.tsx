@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sendroom",
-  description: "CSV to email campaign console",
+  title: "Sendroom — Bản tin Crypto, Forex & Tài chính",
+  description: "Nhận bản tin ngắn gọn, chọn lọc về crypto, forex và tài chính.",
   icons: { icon: [{ url: "/favicon.svg", type: "image/svg+xml", sizes: "any" }] },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#102a43" };
