@@ -41,7 +41,7 @@ Hoặc paste SQL trong `drizzle/0000_init.sql` vào Turso SQL Console.
 
 Tạo API key, đặt `RESEND_API_KEY`. Với local có thể dùng `onboarding@resend.dev`; production nên verify domain và dùng `EMAIL_FROM` thuộc domain đã xác minh.
 
-Để gửi danh sách email CSV từ `/admin/email`, đặt `EMAIL_LIST_EXPORT_TO` thành email nhận trong Vercel **Settings → Environment Variables**. Tính năng gửi bằng `RESEND_API_KEY` và `EMAIL_FROM`, kèm file CSV đính kèm; sau khi thêm/sửa biến, tạo deployment mới.
+Để gửi danh sách email CSV từ `/admin/email`, đặt `EMAIL_LIST_EXPORT_TO` thành email nhận trong Vercel **Settings → Environment Variables**. Tính năng gửi bằng `RESEND_API_KEY` và địa chỉ `EMAIL_LIST_EXPORT_FROM` (nếu bỏ trống sẽ dùng `EMAIL_FROM`), kèm file CSV đính kèm. Domain của địa chỉ From phải được xác minh trong chính tài khoản Resend; sau khi thêm/sửa biến, tạo deployment mới.
 
 ## 5. Chạy
 

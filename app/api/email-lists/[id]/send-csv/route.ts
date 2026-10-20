@@ -29,6 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Chưa cấu hình RESEND_API_KEY để gửi file CSV." }, { status: 503 });
+  const sender = process.env.EMAIL_LIST_EXPORT_FROM?.trim() || process.env.EMAIL_FROM || "onboarding@resend.dev";
 
   try {
     await ensureDatabase();
@@ -46,7 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     ].join("\r\n");
     const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
-      from: process.env.EMAIL_FROM || "onboarding@resend.dev",
+      from: sender,
       to: recipient,
       subject: `CSV email list: ${list.subject}`,
       text: `Attached is the CSV export for “${list.subject}”. It contains ${contacts.length} contacts.`,
