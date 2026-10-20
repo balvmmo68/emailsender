@@ -27,6 +27,7 @@ const providerConfigSchema = z.object({
   delaySeconds: z.number().int().min(1).max(86400),
   dailyLimit: z.number().int().min(1).max(1000000),
   providerLimit: z.string().trim().max(120),
+  enabled: z.boolean().default(true),
 });
 const knownProviderEnvs = new Set(keyDefinitions.map(({ env }) => env));
 const settingsSchema = z.object({
@@ -61,6 +62,7 @@ function getProviderConfigs(row?: { providerConfigsJson?: string | null; provide
       delaySeconds: value?.delaySeconds || 10,
       dailyLimit: value?.dailyLimit || 100,
       providerLimit: value?.providerLimit || String(legacyLimits[env] || ""),
+      enabled: value?.enabled !== false,
     } satisfies ProviderConfig];
   }));
 }

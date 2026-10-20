@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { client, db, ensureDatabase } from "@/db/client";
 import { campaigns, emailSettings, providerUsage, recipients } from "@/db/schema";
-import { isProviderConfigured, sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
+import { isProviderConfigured, isProviderEnabled, sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
 import { hasProviderDailyCapacity, isDefinitiveProviderRejection, providerDailyAllowance, releaseRejectedProviderUsage, reserveProviderUsage } from "@/lib/provider-quota";
 import { rejectCrossOrigin } from "@/lib/request-security";
 
@@ -46,7 +46,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
   const campaignSent = Object.fromEntries(sentRows.filter((item) => item.providerEnv).map((item) => [item.providerEnv as string, item.sentCount]));
   const providers = supportedProviderEnvs.flatMap((env) => {
-    if (!isProviderConfigured(env)) return [];
+    if (!isProviderConfigured(env) || !isProviderEnabled(configs, env)) return [];
     const configuredLimit = Number(configs[env]?.dailyLimit || 100);
     const allowance = providerDailyAllowance(configuredLimit);
     const usedToday = usage[env] || 0;
@@ -296,7 +296,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const usageDate = new Date().toISOString().slice(0, 10);
     const usageRows = await db.select().from(providerUsage).where(eq(providerUsage.usageDate, usageDate));
     const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
-    const candidates = supportedProviderEnvs.filter(isProviderConfigured).sort((a, b) => {
+    const candidates = supportedProviderEnvs.filter((env) => isProviderConfigured(env) && isProviderEnabled(configs, env)).sort((a, b) => {
       const aLimit = Number(configs[a]?.dailyLimit || 100);
       const bLimit = Number(configs[b]?.dailyLimit || 100);
       return (usage[a] || 0) / aLimit - (usage[b] || 0) / bLimit;

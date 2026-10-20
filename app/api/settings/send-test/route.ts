@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
-import { sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
+import { isProviderEnabled, sendViaProvider, supportedProviderEnvs } from "@/lib/email-providers";
 import { recordProviderError } from "@/lib/provider-error-log";
 import { reserveProviderUsage, releaseRejectedProviderUsage } from "@/lib/provider-quota";
 import { db, ensureDatabase } from "@/db/client";
@@ -12,7 +12,7 @@ import { rejectCrossOrigin } from "@/lib/request-security";
 
 const bodySchema = z.object({ env: z.enum(supportedProviderEnvs), to: z.string().email() });
 
-function parseObject(value: string | null | undefined): Record<string, { dailyLimit?: number }> {
+function parseObject(value: string | null | undefined): Record<string, { dailyLimit?: number; enabled?: boolean }> {
   try {
     const parsed = JSON.parse(value || "{}");
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
@@ -38,6 +38,7 @@ export async function POST(req: Request) {
   await ensureDatabase();
   const settings = (await db.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
   const configs = parseObject(settings?.providerConfigsJson);
+  if (!isProviderEnabled(configs, env)) return NextResponse.json({ error: "Provider đang tắt trong Cấu hình Settings." }, { status: 409 });
   const dailyLimit = configs[env]?.dailyLimit || 100;
   const usageDate = new Date().toISOString().slice(0, 10);
   const reserved = await reserveProviderUsage(env, usageDate, dailyLimit);

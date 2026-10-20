@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import ProviderLogsPanel from "@/components/ProviderLogsPanel";
 import RefreshButton from "@/components/RefreshButton";
 
-type ProviderConfig = { delaySeconds: number; dailyLimit: number; providerLimit: string };
+type ProviderConfig = { delaySeconds: number; dailyLimit: number; providerLimit: string; enabled: boolean };
 type KeyInfo = { provider: string; url: string; env: string; configured: boolean; missingVariables?: string[]; freeDaily: string; freeMonthly: string; config: ProviderConfig; usedToday: number; rotationThreshold: number };
 type Settings = { activeProvider: string; testRecipient: string; providerConfigs: Record<string, ProviderConfig> };
 
@@ -55,11 +55,15 @@ export default function SettingsPage() {
     const data = await res.json();
     if (!res.ok) { setError(data.error || "Không thể lưu cấu hình"); return; }
     try { sessionStorage.setItem("sender:settings", JSON.stringify({ settings, keys })); } catch { /* Cache is optional. */ }
-    setMessage("Đã lưu cấu hình riêng cho từng dịch vụ.");
+    setMessage("Đã lưu cấu hình và trạng thái bật/tắt cho từng provider.");
   }
 
   function updateConfig(env: string, patch: Partial<ProviderConfig>) {
     setSettings({ ...settings, providerConfigs: { ...settings.providerConfigs, [env]: { ...settings.providerConfigs[env], ...patch } } });
+  }
+
+  function providerEnabled(env: string) {
+    return settings.providerConfigs[env]?.enabled !== false;
   }
 
   async function testApi(env: string) {
@@ -86,13 +90,13 @@ export default function SettingsPage() {
     {activeTab === "logs" ? <ProviderLogsPanel /> : <>
       {message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}
       <form className="panel settings-panel" onSubmit={save}>
-        <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bảng chính chỉ hiển thị thông tin thao tác nhanh. Bấm “Cài đặt” trong từng provider để xem hạn mức free, usage và chỉnh delay/hạn mức riêng.</div>
+        <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bật/tắt API provider tại từng dòng. Provider bị tắt sẽ không được chọn để gửi campaign hoặc email test. Bấm “Lưu tất cả cấu hình provider” để áp dụng thay đổi. Bấm “Cài đặt” để chỉnh delay/hạn mức riêng.</div>
         <div className="field settings-test-recipient"><label htmlFor="testRecipient">Email nhận test</label><input className="input" id="testRecipient" type="email" value={settings.testRecipient} onChange={(e) => setSettings({ ...settings, testRecipient: e.target.value })} placeholder="you@example.com" /><small>Nhập email rồi bấm “Lưu tất cả cấu hình provider”.</small></div>
         <div className="tablewrap settings-tablewrap"><table className="table settings-table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Test API</th><th>Gửi email test</th></tr></thead><tbody>{keys.map((key) => <tr key={key.env}>
-          <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : key.missingVariables?.length ? `Thiếu ${key.missingVariables.join(", ")}` : "Chưa cấu hình"}</span><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
+          <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : key.missingVariables?.length ? `Thiếu ${key.missingVariables.join(", ")}` : "Chưa cấu hình"}</span><button className={`provider-toggle ${providerEnabled(key.env) ? "is-enabled" : "is-disabled"}`} type="button" role="switch" aria-checked={providerEnabled(key.env)} aria-label={`${providerEnabled(key.env) ? "Tắt" : "Bật"} ${key.provider}`} onClick={() => updateConfig(key.env, { enabled: !providerEnabled(key.env) })}><span className="provider-toggle-track"><span className="provider-toggle-thumb" /></span><span>{providerEnabled(key.env) ? "API bật" : "API tắt"}</span></button><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
           <td data-label="API key"><code>{key.env}</code></td>
           <td data-label="Test API"><button className="button secondary" type="button" disabled={!key.configured || testing === key.env} onClick={() => testApi(key.env)}>{testing === key.env ? "Đang test…" : "Test API"}</button></td>
-          <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
+          <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !providerEnabled(key.env) || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
         </tr>)}</tbody></table></div>
         <div className="actions"><button className="button" type="submit">Lưu tất cả cấu hình provider</button></div>
       </form>

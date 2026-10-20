@@ -13,7 +13,7 @@ const SEND_PROVIDERS: ProviderLimit[] = [
   { name: "AgentMail", env: "AGENTMAIL_API_KEY" },
 ];
 
-type ProviderConfig = { dailyLimit?: number };
+type ProviderConfig = { dailyLimit?: number; enabled?: boolean };
 
 export function getConfiguredProviderDailyCapacity(providerConfigsJson?: string | null) {
   let configs: Record<string, ProviderConfig> = {};
@@ -27,6 +27,7 @@ export function getConfiguredProviderDailyCapacity(providerConfigsJson?: string 
   const providers = SEND_PROVIDERS.flatMap((provider) => {
     const required = [provider.env, ...(provider.requiredVariables || [])];
     if (!required.every((variable) => Boolean(process.env[variable]))) return [];
+    if (configs[provider.env]?.enabled === false) return [];
     const configuredLimit = Number(configs[provider.env]?.dailyLimit);
     const dailyLimit = Number.isFinite(configuredLimit) && configuredLimit > 0 ? Math.floor(configuredLimit) : 100;
     return [{ name: provider.name, dailyLimit }];

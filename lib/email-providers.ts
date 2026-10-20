@@ -40,6 +40,10 @@ export function isProviderConfigured(env: string) {
   return missingProviderEnvVariables(env).length === 0;
 }
 
+export function isProviderEnabled(configs: Record<string, { enabled?: boolean }>, env: string) {
+  return configs[env]?.enabled !== false;
+}
+
 async function resolveAgentMailInboxId(key: string) {
   const configuredInbox = process.env.AGENTMAIL_INBOX_ID?.trim();
   if (configuredInbox) return configuredInbox;
