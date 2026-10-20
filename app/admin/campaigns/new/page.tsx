@@ -14,8 +14,12 @@ type CampaignRow = {
 type CampaignListResponse = { campaigns: CampaignRow[]; page: number; pageSize: number; total: number; totalPages: number };
 type SavedEmailList = { id: string; subject: string; emailCount: number };
 const numberFormat = new Intl.NumberFormat("vi-VN");
+function normalizeHtmlSource(source: string) {
+  return source.trim().replace(/^```(?:html)?[ \t]*\r?\n?/i, "").replace(/\r?\n?```[ \t]*$/, "");
+}
+
 function htmlToPlainText(source: string) {
-  const document = new DOMParser().parseFromString(source, "text/html");
+  const document = new DOMParser().parseFromString(normalizeHtmlSource(source), "text/html");
   document.querySelectorAll("script, style, noscript, template, head").forEach((node) => node.remove());
   const blockTags = new Set(["ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DIV", "FOOTER", "H1", "H2", "H3", "H4", "H5", "H6", "HEADER", "HR", "MAIN", "NAV", "P", "SECTION", "TABLE", "TR"]);
   const extract = (node: Node): string => {
@@ -24,7 +28,11 @@ function htmlToPlainText(source: string) {
     const element = node as HTMLElement;
     const tag = element.tagName;
     if (tag === "BR" || tag === "HR") return "\n";
-    if (tag === "IMG") return (element as HTMLImageElement).alt || "";
+    if (tag === "IMG") {
+      const image = element as HTMLImageElement;
+      const label = image.alt || "Hình ảnh";
+      return `[Hình ảnh: ${label}${image.src ? ` — ${image.src}` : ""}]`;
+    }
     const content = Array.from(element.childNodes, extract).join("");
     if (tag === "LI") return `• ${content.trim()}\n`;
     if (tag === "TD" || tag === "TH") return `${content.trim()} | `;
@@ -51,6 +59,9 @@ export default function NewCampaign() {
   const [html, setHtml] = useState("<p>Xin chào {{name}},</p>\n<p>Nội dung email của bạn.</p>");
   const [text, setText] = useState("Xin chào {{name}},\n\nNội dung email của bạn.");
   const [previewMessage, setPreviewMessage] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [previewTab, setPreviewTab] = useState<"html" | "text">("html");
   const [emailLists, setEmailLists] = useState<SavedEmailList[]>([]);
   const [selectedEmailListId, setSelectedEmailListId] = useState("");
   const [emailListsLoading, setEmailListsLoading] = useState(true);
@@ -117,14 +128,30 @@ export default function NewCampaign() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [activeTab, search, page, refreshKey]);
 
-  function previewPlainText() {
+  useEffect(() => {
+    if (!previewOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setPreviewOpen(false);
+        setPreviewExpanded(false);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [previewOpen]);
+
+  function openPreview() {
     const plainText = htmlToPlainText(html);
-    if (!plainText) {
-      setPreviewMessage("HTML chưa có nội dung văn bản để xem trước.");
-      return;
-    }
     setText(plainText);
-    setPreviewMessage("Đã tạo bản Plain text từ HTML. Bạn vẫn có thể chỉnh sửa nội dung bên phải.");
+    setPreviewMessage(plainText ? "Đã cập nhật Plain text từ HTML; xem HTML kèm hình ảnh trong cửa sổ Preview." : "HTML chưa có phần văn bản; có thể xem hình ảnh trong cửa sổ Preview.");
+    setPreviewTab("html");
+    setPreviewExpanded(false);
+    setPreviewOpen(true);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -191,12 +218,20 @@ export default function NewCampaign() {
         </div></section>
         <section className="panel"><h2>2. Chọn danh sách email</h2><div className="field"><label htmlFor="saved-email-list">Chủ đề danh sách</label><select id="saved-email-list" className="input" required value={selectedEmailListId} onChange={(event) => setSelectedEmailListId(event.target.value)} disabled={emailListsLoading || emailLists.length === 0}><option value="">{emailListsLoading ? "Đang tải danh sách…" : emailLists.length ? "Chọn chủ đề email" : "Chưa có danh sách email"}</option>{emailLists.map((list) => <option key={list.id} value={list.id} disabled={list.emailCount === 0}>{list.subject} — {numberFormat.format(list.emailCount)} email</option>)}</select><p className="sub" style={{ margin: 0 }}>Campaign sẽ dùng bản sao email từ chủ đề được chọn. Danh sách gốc trong Email không bị thay đổi.</p>{emailListsError && <div className="notice error">{emailListsError}</div>}{!emailListsLoading && !emailLists.length && <div className="notice">Tạo danh sách trước tại <a href="/admin/email"><b>Email</b></a>.</div>}</div></section>
         <section className="panel"><h2>3. Soạn nội dung</h2><div className="split">
-          <div className="field"><div className="campaign-html-heading"><label htmlFor="campaign-html">HTML</label><button className="button secondary" type="button" onClick={previewPlainText}>Preview</button></div><textarea id="campaign-html" className="textarea mono" value={html} onChange={(event) => { setHtml(event.target.value); setPreviewMessage(""); }} /></div>
+          <div className="field"><div className="campaign-html-heading"><label htmlFor="campaign-html">HTML</label><button className="button secondary" type="button" onClick={openPreview}>Preview</button></div><textarea id="campaign-html" className="textarea mono" value={html} onChange={(event) => { setHtml(event.target.value); setPreviewMessage(""); }} /></div>
           <div className="field"><label htmlFor="campaign-text">Plain text</label><textarea id="campaign-text" className="textarea" value={text} onChange={(event) => setText(event.target.value)} /></div>
         </div>{previewMessage && <p className="campaign-preview-message" role="status">{previewMessage}</p>}<p className="sub" style={{ marginTop: 12, marginBottom: 0 }}>Biến hỗ trợ ví dụ: <code>{"{{name}}"}</code>, <code>{"{{email}}"}</code>, hoặc tên cột CSV khác.</p></section>
         {msg && <div className="notice error">{msg}</div>}
         <div className="actions"><button className="button" disabled={busy}>{busy ? "Đang tạo…" : "Tạo campaign"}</button><a className="button secondary" href="/admin">Hủy</a></div>
       </form>
+      {previewOpen && <div className="campaign-preview-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setPreviewOpen(false); setPreviewExpanded(false); } }}>
+        <section className={`campaign-preview-modal ${previewExpanded ? "expanded" : ""}`} role="dialog" aria-modal="true" aria-labelledby="campaign-preview-title" onMouseDown={(event) => event.stopPropagation()}>
+          <header className="campaign-preview-header"><div><span className="eyebrow">Campaign</span><h2 id="campaign-preview-title">Xem trước email</h2></div><div className="campaign-preview-actions"><button className="button secondary" type="button" onClick={() => setPreviewExpanded((value) => !value)}>{previewExpanded ? "Thu nhỏ" : "Phóng to"}</button><button className="button secondary" type="button" onClick={() => { setPreviewOpen(false); setPreviewExpanded(false); }}>Đóng</button></div></header>
+          <div className="campaign-preview-tabs" role="tablist" aria-label="Chế độ xem trước"><button className={`settings-tab ${previewTab === "html" ? "active" : ""}`} type="button" role="tab" aria-selected={previewTab === "html"} onClick={() => setPreviewTab("html")}>HTML + hình ảnh</button><button className={`settings-tab ${previewTab === "text" ? "active" : ""}`} type="button" role="tab" aria-selected={previewTab === "text"} onClick={() => setPreviewTab("text")}>Plain text</button></div>
+          {previewTab === "html" ? <iframe className="campaign-preview-iframe" title="Xem trước nội dung HTML của email" sandbox="" srcDoc={normalizeHtmlSource(html)} /> : <pre className="campaign-preview-plain">{text || "Không có nội dung Plain text."}</pre>}
+          <p className="campaign-preview-hint">Ảnh được hiển thị trong tab HTML. Plain text chỉ hiển thị mô tả ảnh (alt text) và đường dẫn ảnh.</p>
+        </section>
+      </div>}
     </> : <section className="panel">
       <div className="toolbar" style={{ alignItems: "end", flexWrap: "wrap" }}>
         <div><h2>Danh sách campaigns</h2><p className="sub">Tìm theo tên hoặc subject. Dữ liệu được tải trực tiếp từ Turso.</p></div>

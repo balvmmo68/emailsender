@@ -103,6 +103,18 @@ button, a.button { -webkit-tap-highlight-color: transparent; }
 .campaign-html-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .campaign-html-heading .button { min-height: 36px; padding: 8px 13px; }
 .campaign-preview-message { margin: 10px 0 0; color: var(--teal); font-size: 13px; }
+.campaign-preview-overlay { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: #102a43b8; }
+.campaign-preview-modal { width: min(960px, 100%); height: min(780px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; overflow: hidden; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 24px 80px #102a4350; }
+.campaign-preview-modal.expanded { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+.campaign-preview-header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.campaign-preview-header h2 { margin: 4px 0 0; font-size: 19px; }
+.campaign-preview-actions { display: flex; gap: 8px; }
+.campaign-preview-actions .button { min-height: 38px; padding: 8px 12px; }
+.campaign-preview-tabs { display: flex; gap: 6px; margin: 14px 0; padding: 4px; width: fit-content; max-width: 100%; border-radius: 9px; background: #edf2f6; }
+.campaign-preview-tabs .settings-tab { min-height: 36px; padding: 7px 12px; }
+.campaign-preview-iframe { width: 100%; flex: 1 1 auto; min-height: 0; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.campaign-preview-plain { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 9px; background: #f8fafc; color: var(--ink); font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.campaign-preview-hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; }
 .input, .textarea { width: 100%; min-width: 0; border: 1px solid #c9d5df; border-radius: 8px; padding: 11px 12px; font: inherit; background: #fff; }
 .input { min-height: 46px; }
 .textarea { min-height: 170px; resize: vertical; }
@@ -243,6 +255,13 @@ body.sidebar-collapsed .sidebar-widget { left: 12px; }
   .settings-table .input { min-height: 42px; padding: 9px 10px; }
   .settings-table .button { width: 100%; min-height: 42px; padding: 9px 10px; }
   .provider-modal { padding: 18px; }
+  .campaign-preview-overlay { padding: 0; }
+  .campaign-preview-modal, .campaign-preview-modal.expanded { width: 100vw; height: 100dvh; max-height: 100dvh; padding: 14px; border: 0; border-radius: 0; }
+  .campaign-preview-header { align-items: flex-start; }
+  .campaign-preview-header h2 { font-size: 17px; }
+  .campaign-preview-actions { gap: 6px; }
+  .campaign-preview-actions .button { min-height: 36px; padding: 7px 9px; font-size: 12px; }
+  .campaign-preview-tabs .settings-tab { padding: 7px 9px; font-size: 12px; }
   .provider-meta { grid-template-columns: 1fr; }
   .send-controls-header { display: block; }
   .send-controls-header > .pill { margin-top: 12px; }
