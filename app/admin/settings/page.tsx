@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [error, setError] = useState("");
   const [testing, setTesting] = useState("");
   const [sending, setSending] = useState("");
+  const [savingProvider, setSavingProvider] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<"settings" | "logs">("settings");
 
@@ -66,6 +67,39 @@ export default function SettingsPage() {
     return settings.providerConfigs[env]?.enabled !== false;
   }
 
+  async function toggleProvider(env: string) {
+    const enabled = !providerEnabled(env);
+    setSavingProvider(env);
+    setMessage("");
+    setError("");
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ env, enabled }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Không thể cập nhật trạng thái provider");
+      const nextSettings = {
+        ...settings,
+        providerConfigs: {
+          ...settings.providerConfigs,
+          [env]: { ...settings.providerConfigs[env], enabled: result.enabled as boolean },
+        },
+      };
+      setSettings(nextSettings);
+      try {
+        sessionStorage.setItem("sender:settings", JSON.stringify({ settings: nextSettings, keys }));
+        localStorage.setItem("sender:provider-settings-updated", String(Date.now()));
+      } catch { /* Browser cache and cross-tab signal are optional. */ }
+      setMessage(`${env} đã ${enabled ? "bật" : "tắt"}. Thay đổi đã lưu và đang được áp dụng vào hạn mức campaign.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể cập nhật trạng thái provider");
+    } finally {
+      setSavingProvider("");
+    }
+  }
+
   async function testApi(env: string) {
     setTesting(env); setMessage(""); setError("");
     const response = await fetch("/api/settings/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ env }) });
@@ -90,12 +124,12 @@ export default function SettingsPage() {
     {activeTab === "logs" ? <ProviderLogsPanel /> : <>
       {message && <div className="notice">{message}</div>}{error && <div className="notice error">{error}</div>}
       <form className="panel settings-panel" onSubmit={save}>
-        <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bật/tắt API provider tại từng dòng. Provider bị tắt sẽ không được chọn để gửi campaign hoặc email test. Bấm “Lưu tất cả cấu hình provider” để áp dụng thay đổi. Bấm “Cài đặt” để chỉnh delay/hạn mức riêng.</div>
+        <h2>Cấu hình từng dịch vụ</h2><div className="notice">Bật/tắt API provider tại từng dòng. Thay đổi trạng thái được lưu và áp dụng ngay vào gửi campaign, email test và hạn mức. Bấm “Lưu tất cả cấu hình provider” để lưu các cấu hình khác. Bấm “Cài đặt” để chỉnh delay/hạn mức riêng.</div>
         <div className="field settings-test-recipient"><label htmlFor="testRecipient">Email nhận test</label><input className="input" id="testRecipient" type="email" value={settings.testRecipient} onChange={(e) => setSettings({ ...settings, testRecipient: e.target.value })} placeholder="you@example.com" /><small>Nhập email rồi bấm “Lưu tất cả cấu hình provider”.</small></div>
         <div className="tablewrap settings-tablewrap"><table className="table settings-table"><thead><tr><th>Nhà cung cấp</th><th>API key</th><th>Trạng thái API</th><th>Test API</th><th>Gửi email test</th></tr></thead><tbody>{keys.map((key) => <tr key={key.env}>
           <td data-label="Nhà cung cấp"><a href={key.url} target="_blank" rel="noreferrer" title={`Mở website ${key.provider}`}><b>{key.provider}</b></a><br /><span className={`pill ${!key.configured ? "pill-danger" : ""}`}>{key.configured ? "Đã cấu hình" : key.missingVariables?.length ? `Thiếu ${key.missingVariables.join(", ")}` : "Chưa cấu hình"}</span><button className="provider-settings-link" type="button" onClick={() => setSelectedProvider(key)}>Cài đặt</button></td>
           <td data-label="API key"><code>{key.env}</code></td>
-          <td data-label="Trạng thái API"><button className={`provider-toggle ${providerEnabled(key.env) ? "is-enabled" : "is-disabled"}`} type="button" role="switch" aria-checked={providerEnabled(key.env)} aria-label={`${providerEnabled(key.env) ? "Tắt" : "Bật"} ${key.provider}`} onClick={() => updateConfig(key.env, { enabled: !providerEnabled(key.env) })}><span className="provider-toggle-track"><span className="provider-toggle-thumb" /></span><span>{providerEnabled(key.env) ? "Bật" : "Tắt"}</span></button></td>
+          <td data-label="Trạng thái API"><button className={`provider-toggle ${providerEnabled(key.env) ? "is-enabled" : "is-disabled"}`} type="button" role="switch" aria-checked={providerEnabled(key.env)} aria-label={`${providerEnabled(key.env) ? "Tắt" : "Bật"} ${key.provider}`} disabled={savingProvider === key.env} onClick={() => void toggleProvider(key.env)}><span className="provider-toggle-track"><span className="provider-toggle-thumb" /></span><span>{savingProvider === key.env ? "Đang lưu…" : providerEnabled(key.env) ? "Bật" : "Tắt"}</span></button></td>
           <td data-label="Test API"><button className="button secondary" type="button" disabled={!key.configured || testing === key.env} onClick={() => testApi(key.env)}>{testing === key.env ? "Đang test…" : "Test API"}</button></td>
           <td data-label="Gửi email test"><button className="button secondary" type="button" disabled={!key.configured || !providerEnabled(key.env) || !settings.testRecipient || sending === key.env} onClick={() => sendProviderTest(key.env)}>{sending === key.env ? "Đang gửi…" : "Gửi test"}</button></td>
         </tr>)}</tbody></table></div>

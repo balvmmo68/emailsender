@@ -45,6 +45,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   ]);
   const usage = Object.fromEntries(usageRows.map((item) => [item.providerEnv, item.sentCount]));
   const campaignSent = Object.fromEntries(sentRows.filter((item) => item.providerEnv).map((item) => [item.providerEnv as string, item.sentCount]));
+  const lastRecipient = campaign.sendCursor > 0 ? await recipientAtCursor(id, campaign.sendCursor - 1) : undefined;
+  const historicalProviderEnv = campaign.activeProviderEnv || lastRecipient?.providerEnv || null;
+  const currentProviderEnv = historicalProviderEnv && isProviderConfigured(historicalProviderEnv) && isProviderEnabled(configs, historicalProviderEnv) ? historicalProviderEnv : null;
+  const disabledCurrentProviderEnv = historicalProviderEnv && !isProviderEnabled(configs, historicalProviderEnv) ? historicalProviderEnv : null;
   const providers = supportedProviderEnvs.flatMap((env) => {
     if (!isProviderConfigured(env) || !isProviderEnabled(configs, env)) return [];
     const configuredLimit = Number(configs[env]?.dailyLimit || 100);
@@ -52,12 +56,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     const usedToday = usage[env] || 0;
     return [{ env, name: PROVIDER_NAMES[env] || env, dailyLimit: configuredLimit, allowance, usedToday, remaining: Math.max(0, allowance - usedToday), campaignSent: campaignSent[env] || 0 }];
   });
-  const lastRecipient = campaign.sendCursor > 0 ? await recipientAtCursor(id, campaign.sendCursor - 1) : undefined;
   return NextResponse.json({
     status: campaign.sendStatus,
     cursor: campaign.sendCursor,
     total: campaign.recipientCount,
-    currentProviderEnv: campaign.activeProviderEnv || lastRecipient?.providerEnv || null,
+    currentProviderEnv,
+    disabledCurrentProviderEnv,
     pendingProviderEnv: campaign.pendingProviderEnv || null,
     providerSwitchAfter: campaign.providerSwitchAfter || null,
     providerFailureEnv: campaign.providerFailureEnv || null,

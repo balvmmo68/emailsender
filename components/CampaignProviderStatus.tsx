@@ -8,6 +8,7 @@ type ProviderStatus = {
   cursor: number;
   total: number;
   currentProviderEnv: string | null;
+  disabledCurrentProviderEnv: string | null;
   pendingProviderEnv: string | null;
   providerSwitchAfter: number | null;
   providerFailureEnv: string | null;
@@ -37,10 +38,14 @@ export default function CampaignProviderStatus({ campaignId }: { campaignId: str
         if (mounted) setError(err instanceof Error ? err.message : "Không tải được hạn mức provider.");
       }
     };
+    const onSettingsChanged = (event: StorageEvent) => {
+      if (event.key === "sender:provider-settings-updated") void refresh();
+    };
     void refresh();
+    window.addEventListener("storage", onSettingsChanged);
     const refreshTimer = window.setInterval(refresh, 5000);
     const clockTimer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => { mounted = false; window.clearInterval(refreshTimer); window.clearInterval(clockTimer); };
+    return () => { mounted = false; window.removeEventListener("storage", onSettingsChanged); window.clearInterval(refreshTimer); window.clearInterval(clockTimer); };
   }, [campaignId]);
 
   if (error && !data) return <section className="panel"><h2>Hạn mức email/ngày</h2><div className="notice error">{error}</div></section>;
@@ -59,8 +64,9 @@ export default function CampaignProviderStatus({ campaignId }: { campaignId: str
     </div>
     <div className="campaign-current-provider">
       <span className="eyebrow">API provider đang chạy</span>
-      <b>{currentProvider?.name || "Chưa gửi email"}</b>
+      <b>{currentProvider?.name || (data.disabledCurrentProviderEnv ? `${data.disabledCurrentProviderEnv} đã tắt` : "Chưa gửi email")}</b>
       {currentProvider && <span>{numberFormat.format(currentProvider.campaignSent)} email đã gửi trong campaign này · còn {numberFormat.format(currentProvider.remaining)} quota hôm nay</span>}
+      {!currentProvider && data.disabledCurrentProviderEnv && <span>Hạn mức provider đã được loại khỏi bộ đếm; campaign sẽ dùng provider đang bật ở lượt xử lý kế tiếp.</span>}
     </div>
     {pendingProvider && <div className="notice campaign-provider-switch" role="status">Đang nghỉ {numberFormat.format(secondsRemaining)} giây trước khi chuyển sang {pendingProvider.name}.</div>}
     {data.providerFailureCount > 0 && <div className="notice campaign-provider-streak" role="status">{data.providerFailureCount >= 4 ? `${data.providers.find((provider) => provider.env === data.providerFailureEnv)?.name || data.providerFailureEnv} đã lỗi 4 recipient liên tiếp; campaign đang giữ các recipient để thử lại khi có provider khác khả dụng.` : `${data.providers.find((provider) => provider.env === data.providerFailureEnv)?.name || data.providerFailureEnv} đang có ${data.providerFailureCount}/4 recipient lỗi liên tiếp; nếu recipient tiếp theo cũng bị từ chối, hệ thống sẽ chờ 60 giây rồi đổi provider và thử lại nhóm lỗi.`}</div>}

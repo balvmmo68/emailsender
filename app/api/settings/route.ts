@@ -116,3 +116,48 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Giá trị cấu hình provider không hợp lệ" }, { status: 400 });
   }
 }
+
+export async function PATCH(req: Request) {
+  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const originError = rejectCrossOrigin(req);
+  if (originError) return originError;
+  const parsed = z.object({
+    env: z.string().refine((env) => knownProviderEnvs.has(env), "Provider không được hỗ trợ"),
+    enabled: z.boolean(),
+  }).safeParse(await req.json().catch(() => ({})));
+  if (!parsed.success) return NextResponse.json({ error: "Trạng thái provider không hợp lệ" }, { status: 400 });
+
+  try {
+    await ensureDatabase();
+    await db.transaction(async (tx) => {
+      const row = (await tx.select().from(emailSettings).where(eq(emailSettings.id, 1)).limit(1))[0];
+      const providerConfigs = parseJson(row?.providerConfigsJson);
+      const current = providerConfigs[parsed.data.env] && typeof providerConfigs[parsed.data.env] === "object"
+        ? providerConfigs[parsed.data.env] as Partial<ProviderConfig>
+        : {};
+      providerConfigs[parsed.data.env] = {
+        delaySeconds: current.delaySeconds || 10,
+        dailyLimit: current.dailyLimit || 100,
+        providerLimit: current.providerLimit || "",
+        enabled: parsed.data.enabled,
+      } satisfies ProviderConfig;
+      const providerConfigsJson = JSON.stringify(providerConfigs);
+      await tx.insert(emailSettings).values({
+        id: 1,
+        delaySeconds: row?.delaySeconds || 10,
+        dailyLimit: row?.dailyLimit || 100,
+        providerLimitsJson: row?.providerLimitsJson || "{}",
+        providerConfigsJson,
+        testRecipient: row?.testRecipient || "",
+        updatedAt: Date.now(),
+      }).onConflictDoUpdate({
+        target: emailSettings.id,
+        set: { providerConfigsJson, updatedAt: Date.now() },
+      });
+    });
+    return NextResponse.json({ ok: true, env: parsed.data.env, enabled: parsed.data.enabled });
+  } catch (error) {
+    console.error("[settings] Could not update provider enabled state:", error);
+    return NextResponse.json({ error: "Không thể lưu trạng thái provider." }, { status: 500 });
+  }
+}
