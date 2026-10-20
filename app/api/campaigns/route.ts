@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { db, ensureDatabase } from "@/db/client";
-import { campaigns, recipients } from "@/db/schema";
+import { campaigns, emailListContacts, emailLists, recipients } from "@/db/schema";
 import { count, desc, like, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import Papa from "papaparse";
 import { z } from "zod";
 
 const schema = z.object({
@@ -47,25 +47,26 @@ export async function POST(req: Request) {
     await ensureDatabase();
     const form = await req.formData();
     const parsed = schema.parse({ name: form.get("name"), subject: form.get("subject"), html: form.get("html"), text: form.get("text") });
-    const file = form.get("file");
-    if (!(file instanceof File)) return NextResponse.json({ error: "CSV file is required" }, { status: 400 });
-    if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "CSV tối đa 5MB" }, { status: 400 });
-
-    const csv = await file.text();
-    const result = Papa.parse<Record<string, string>>(csv, { header: true, skipEmptyLines: true, transformHeader: (header) => header.trim().toLowerCase() });
-    const rows = result.data;
-    const emailKey = Object.keys(rows[0] || {}).find((key) => key.toLowerCase() === "email");
-    if (!emailKey) return NextResponse.json({ error: "CSV phải có cột email" }, { status: 400 });
-    const valid = rows.filter((row) => /^\S+@\S+\.\S+$/.test((row[emailKey] || "").trim())).slice(0, 10000);
-    if (!valid.length) return NextResponse.json({ error: "Không có email hợp lệ" }, { status: 400 });
+    const listId = form.get("listId");
+    if (typeof listId !== "string" || !listId) return NextResponse.json({ error: "Vui lòng chọn chủ đề danh sách email." }, { status: 400 });
+    const [emailList] = await db.select({ id: emailLists.id }).from(emailLists).where(eq(emailLists.id, listId)).limit(1);
+    if (!emailList) return NextResponse.json({ error: "Chủ đề danh sách email không tồn tại. Hãy làm mới và chọn lại." }, { status: 404 });
+    const contacts = await db.select({ email: emailListContacts.email, name: emailListContacts.name })
+      .from(emailListContacts).where(eq(emailListContacts.listId, listId)).orderBy(desc(emailListContacts.createdAt));
+    if (!contacts.length) return NextResponse.json({ error: "Chủ đề này chưa có email. Hãy chọn danh sách có email." }, { status: 400 });
 
     const id = randomUUID();
     const now = Date.now();
-    await db.insert(campaigns).values({ id, name: parsed.name, subject: parsed.subject, htmlContent: parsed.html, textContent: parsed.text, recipientCount: valid.length, createdAt: now, updatedAt: now });
-    await db.insert(recipients).values(valid.map((row) => ({ id: randomUUID(), campaignId: id, email: row[emailKey].trim().toLowerCase(), name: row.name?.trim() || null, variablesJson: JSON.stringify(row), status: "pending", createdAt: now })));
-    return NextResponse.json({ id, count: valid.length });
+    await db.insert(campaigns).values({ id, name: parsed.name, subject: parsed.subject, htmlContent: parsed.html, textContent: parsed.text, recipientCount: contacts.length, createdAt: now, updatedAt: now });
+    for (let offset = 0; offset < contacts.length; offset += 100) {
+      await db.insert(recipients).values(contacts.slice(offset, offset + 100).map((contact) => ({
+        id: randomUUID(), campaignId: id, email: contact.email, name: contact.name,
+        variablesJson: JSON.stringify({ email: contact.email, name: contact.name || "" }), status: "pending", createdAt: now,
+      })));
+    }
+    return NextResponse.json({ id, count: contacts.length });
   } catch (error) {
     console.error("[campaigns] Không thể tạo campaign:", error);
-    return NextResponse.json({ error: "Không thể tạo campaign. Kiểm tra kết nối Turso và file CSV." }, { status: 500 });
+    return NextResponse.json({ error: "Không thể tạo campaign. Kiểm tra danh sách email đã chọn và kết nối Turso." }, { status: 500 });
   }
 }

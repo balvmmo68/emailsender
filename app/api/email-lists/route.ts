@@ -37,6 +37,13 @@ export async function GET(req: Request) {
       return NextResponse.json({ list, contacts, page: currentPage, pageSize, total, totalPages });
     }
 
+    if (params.get("forSelect") === "1") {
+      const lists = await db.select({ id: emailLists.id, subject: emailLists.subject, createdAt: emailLists.createdAt, emailCount: count(emailListContacts.id) })
+        .from(emailLists).leftJoin(emailListContacts, eq(emailListContacts.listId, emailLists.id))
+        .groupBy(emailLists.id).orderBy(desc(emailLists.createdAt));
+      return NextResponse.json({ lists });
+    }
+
     const listSearch = search ? like(emailLists.subject, `%${search}%`) : undefined;
     const [countRow] = await db.select({ value: count() }).from(emailLists).where(listSearch);
     const total = Number(countRow?.value || 0);

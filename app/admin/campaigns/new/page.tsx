@@ -12,6 +12,7 @@ type CampaignRow = {
   createdAt: number;
 };
 type CampaignListResponse = { campaigns: CampaignRow[]; page: number; pageSize: number; total: number; totalPages: number };
+type SavedEmailList = { id: string; subject: string; emailCount: number };
 const numberFormat = new Intl.NumberFormat("vi-VN");
 const CAMPAIGN_CACHE_PREFIX = "sender:campaign-list:";
 
@@ -31,7 +32,10 @@ export default function NewCampaign() {
   const [subject, setSubject] = useState("");
   const [html, setHtml] = useState("<p>Xin chào {{name}},</p>\n<p>Nội dung email của bạn.</p>");
   const [text, setText] = useState("Xin chào {{name}},\n\nNội dung email của bạn.");
-  const [file, setFile] = useState<File | null>(null);
+  const [emailLists, setEmailLists] = useState<SavedEmailList[]>([]);
+  const [selectedEmailListId, setSelectedEmailListId] = useState("");
+  const [emailListsLoading, setEmailListsLoading] = useState(true);
+  const [emailListsError, setEmailListsError] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
@@ -43,6 +47,19 @@ export default function NewCampaign() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const manualRefresh = useRef(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/email-lists?forSelect=1", { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Không thể tải chủ đề email.");
+        setEmailLists(data.lists as SavedEmailList[]);
+      })
+      .catch((error) => { if (!controller.signal.aborted) setEmailListsError(error instanceof Error ? error.message : "Không thể tải chủ đề email."); })
+      .finally(() => { if (!controller.signal.aborted) setEmailListsLoading(false); });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (activeTab !== "list") return;
@@ -90,7 +107,7 @@ export default function NewCampaign() {
     formData.set("subject", subject);
     formData.set("html", html);
     formData.set("text", text);
-    if (file) formData.set("file", file);
+    formData.set("listId", selectedEmailListId);
     try {
       const response = await fetch("/api/campaigns", { method: "POST", body: formData });
       const data = await response.json();
@@ -137,13 +154,13 @@ export default function NewCampaign() {
     </div>
 
     {activeTab === "create" ? <>
-      <p className="sub">Upload CSV với cột <code>email</code>, tùy chọn <code>name</code> và các biến khác.</p>
+      <p className="sub">Chọn một chủ đề danh sách đã lưu trong mục Email để sử dụng địa chỉ của danh sách đó.</p>
       <form onSubmit={submit}>
         <section className="panel"><h2>1. Thông tin</h2><div className="grid">
           <div className="field"><label htmlFor="campaign-name">Tên campaign</label><input id="campaign-name" className="input" required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ra mắt sản phẩm tháng 10" /></div>
           <div className="field"><label htmlFor="campaign-subject">Subject</label><input id="campaign-subject" className="input" required value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Xin chào {{name}}" /></div>
         </div></section>
-        <section className="panel"><h2>2. Upload CSV</h2><div className="fileinput"><input type="file" accept=".csv,text/csv" required onChange={(event) => setFile(event.target.files?.[0] || null)} /><p className="sub" style={{ marginTop: 10, marginBottom: 0 }}>CSV tối đa 5MB. Hệ thống tự nhận diện cột email.</p></div></section>
+        <section className="panel"><h2>2. Chọn danh sách email</h2><div className="field"><label htmlFor="saved-email-list">Chủ đề danh sách</label><select id="saved-email-list" className="input" required value={selectedEmailListId} onChange={(event) => setSelectedEmailListId(event.target.value)} disabled={emailListsLoading || emailLists.length === 0}><option value="">{emailListsLoading ? "Đang tải danh sách…" : emailLists.length ? "Chọn chủ đề email" : "Chưa có danh sách email"}</option>{emailLists.map((list) => <option key={list.id} value={list.id} disabled={list.emailCount === 0}>{list.subject} — {numberFormat.format(list.emailCount)} email</option>)}</select><p className="sub" style={{ margin: 0 }}>Campaign sẽ dùng bản sao email từ chủ đề được chọn. Danh sách gốc trong Email không bị thay đổi.</p>{emailListsError && <div className="notice error">{emailListsError}</div>}{!emailListsLoading && !emailLists.length && <div className="notice">Tạo danh sách trước tại <a href="/admin/email"><b>Email</b></a>.</div>}</div></section>
         <section className="panel"><h2>3. Soạn nội dung</h2><div className="split">
           <div className="field"><label htmlFor="campaign-html">HTML</label><textarea id="campaign-html" className="textarea mono" value={html} onChange={(event) => setHtml(event.target.value)} /></div>
           <div className="field"><label htmlFor="campaign-text">Plain text</label><textarea id="campaign-text" className="textarea" value={text} onChange={(event) => setText(event.target.value)} /></div>
